@@ -15,6 +15,10 @@ import yaml
 import catalog
 
 BATCH, MODEL = 10, "claude-haiku-4-5-20251001"
+# A sample line is clipped before it reaches a model: `pi-large.txt` is one line
+# of 4.2 million digits and `uber.gif` is a picture, and neither says anything
+# past its first few characters that is worth paying for.
+CLIP = 200
 MODEL_AXES = ("target", "tech", "provenance", "language")
 
 PROMPT = """\
@@ -174,7 +178,8 @@ def prompt_for(tax, batch, show_name=True):
         size = f"lines: {e['lines']}" if "lines" in e else f"files: {e.get('files', '?')}"
         facts = f"{size}  shape: {'/'.join(e.get('shape') or ['unknown'])}  " \
                 f"case: {e.get('case', 'unknown')}  order: {e.get('order', 'unknown')}"
-        out.append("\n".join(head + [facts, "sample:"] + ["  " + l for l in e.get("sample", [])]))
+        lines = [l[:CLIP] + " …clipped" if len(l) > CLIP else l for l in e.get("sample", [])]
+        out.append("\n".join(head + [facts, "sample:"] + ["  " + l for l in lines]))
     return "\n\n".join(out)
 
 
@@ -530,6 +535,12 @@ def selftest():
                    tax, ask_with(agents))
     assert "Mozilla/5.0" in seen[0] and "files: 4499" in seen[0], seen[0]
     assert d["g1"]["target"] == ["header"]
+
+    # a line too long to be worth paying for is clipped before it is sent
+    seen.clear()
+    qualify([entry("p1", "pi-large.txt", sample=["3." + "1415926535" * 500])], tax,
+            ask_with(GOOD))
+    assert "…clipped" in seen[0] and len(seen[0]) < 4000, len(seen[0])
 
     # the blind condition shows the model nothing but the sample and the facts
     seen.clear()
