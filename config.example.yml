@@ -1,0 +1,28 @@
+# Copy to config.yml and adjust. config.yml is local and never committed.
+sources:
+  - path: /usr/share/seclists
+    exclude: ["*.md", "README*", "LICENSE", ".git/*", "*.zip", "*.gz"]
+    group: ["Fuzzing/User-Agents"]      # 4,499 files, one concept
+
+  - path: /opt/my-resources/wordlist
+    exclude: ["*.md"]
+
+  - path: /opt/my-resources/files/wordlists   # Burp payload lists
+    exclude: ["*.md"]
+
+  - path: /usr/share/wordlists
+    exclude: ["*.gz", "*.md"]           # rockyou ships gzipped only
+
+  # Lists shipped inside a tool, usable outside it
+  - path: /usr/share/sqlmap/data/txt
+    exclude: ["*.md"]
+
+# Qualification. `routing` is what the calibration decides: a category prefix to
+# the model that handles it. One model for everything until it says otherwise.
+qualify:
+  batch: 10
+  routing:
+    default: claude-haiku-4-5-20251001
+    # Payloads: claude-sonnet-5-5
+    # Fuzzing: claude-sonnet-5-5
+    # Pattern-Matching: claude-sonnet-5-5

@@ -1,0 +1,152 @@
+# Controlled vocabulary for the axes. Adding a value is one line here;
+# qualification rejects anything not listed rather than recording it.
+axes:
+  target: [directory, file, extension, parameter, api-route, subdomain, vhost,
+           username, password, header, server-variable, injection-payload]
+
+  tech: [generic, apache, nginx, iis, lighttpd, tomcat, jetty, jboss, weblogic,
+         websphere, coldfusion, php, asp, aspnet, jsp, java, struts, spring,
+         python, django, flask, ruby, rails, nodejs, perl, cgi, dotnet, golang,
+         wordpress, joomla, drupal, magento, typo3, sharepoint, confluence,
+         jira, jenkins, gitlab, grafana, kibana, elasticsearch, redis, mongodb,
+         mysql, mssql, oracle, postgresql, sqlite, db2, informix, firebird,
+         sybase, graphql, soap, wsdl, ssti, xml, json, ldap, smb, ftp, ssh,
+         smtp, snmp, dns, voip, windows, linux, unix, macos, android, ios,
+         docker, kubernetes, aws, azure, gcp, cisco, fortinet, citrix, vmware,
+         sap, iot, scada]
+
+  provenance: [curated, real-world, generated, leaked]
+
+  language: [generic, english, spanish, french, german, dutch, danish, swedish,
+             norwegian, finnish, italian, portuguese, polish, russian,
+             ukrainian, czech, slovak, hungarian, romanian, greek, turkish,
+             arabic, hebrew, persian, hindi, chinese, japanese, korean, thai,
+             vietnamese, indonesian, catalan, latin]
+
+  shape: [bare-word, rooted-path, name-with-extension, bare-extension, url]
+
+  order: [alphabetical, frequency, suspected-frequency, unknown]
+
+  case: [lower, mixed]
+
+# Anything the model might plausibly say that means a canonical value.
+# Matching lowercases first, so only spelling variants belong here.
+aliases:
+  directories: directory
+  dir: directory
+  dirs: directory
+  files: file
+  filenames: file
+  filename: file
+  extensions: extension
+  file-extension: extension
+  params: parameter
+  param: parameter
+  parameters: parameter
+  querystring: parameter
+  api: api-route
+  api-endpoint: api-route
+  api-routes: api-route
+  endpoint: api-route
+  subdomains: subdomain
+  hostname: subdomain
+  vhosts: vhost
+  virtual-host: vhost
+  usernames: username
+  user: username
+  users: username
+  passwords: password
+  credential: password
+  credentials: password
+  headers: header
+  http-header: header
+  server-variables: server-variable
+  env-var: server-variable
+  environment-variable: server-variable
+  payload: injection-payload
+  payloads: injection-payload
+  injection: injection-payload
+
+  php5: php
+  php7: php
+  php8: php
+  apache2: apache
+  httpd: apache
+  "asp.net": aspnet
+  "asp-net": aspnet
+  iis7: iis
+  ms-sql: mssql
+  sqlserver: mssql
+  "sql-server": mssql
+  postgres: postgresql
+  mariadb: mysql
+  node: nodejs
+  "node.js": nodejs
+  k8s: kubernetes
+  wp: wordpress
+  win: windows
+  win32: windows
+  osx: macos
+  "ms-sharepoint": sharepoint
+  java-ee: java
+  j2ee: java
+  none: generic
+  any: generic
+  all: generic
+
+  realworld: real-world
+  real_world: real-world
+  real-life: real-world
+  harvested: real-world
+  breach: leaked
+  breached: leaked
+  dump: leaked
+  synthetic: generated
+  machine-generated: generated
+  handcrafted: curated
+  hand-picked: curated
+  manual: curated
+
+  en: english
+  us: english
+  nl: dutch
+  de: german
+  fr: french
+  es: spanish
+  it: italian
+  pt: portuguese
+  ru: russian
+  da: danish
+  dk: danish
+  sv: swedish
+  zh: chinese
+  ja: japanese
+  multilingual: generic
+
+  freq: frequency
+  frequency-ordered: frequency
+  by-frequency: frequency
+  sorted: alphabetical
+  alpha: alphabetical
+  probable: suspected-frequency
+  unsorted: unknown
+  none-known: unknown
+
+  lowercase: lower
+  mixed-case: mixed
+
+# Filler an intent may not contain: an intent that could have been written
+# without opening the file is a failed intent. Matched on word boundaries.
+banned: ["wordlist", "wordlists", "list of", "lists of", "common", "various",
+         "used for fuzzing", "assorted", "a variety of", "miscellaneous"]
+
+# An axis with no vocabulary: freshness is the four-digit year the contents
+# imply. Listed so the census reports it like any other axis.
+open_axes: [freshness]
+
+# An intent shorter than this says nothing an agent can act on.
+min_intent: 30
+
+# Distinct intents divided by entries qualified by a model. ronin-wordlists
+# scores 0.019; a run below this writes nothing.
+distinctness: 0.95
