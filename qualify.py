@@ -6,7 +6,7 @@ vocabulary, batch splitting, the quality gates, README precedence and intent
 provenance all sit behind it. `ask` is injected by the caller, so the self-check
 exercises the whole spine without a network call.
 """
-import fnmatch, json, os, re, sys, time, urllib.error, urllib.request
+import fnmatch, json, os, re, subprocess, sys, tempfile, time, urllib.error, urllib.request
 from collections import Counter
 from pathlib import Path
 
@@ -34,7 +34,8 @@ must never get the same sentence. Never use these words: {banned}.
 The scan has already established the facts stated with each entry. Do not repeat
 them and do not contradict them.
 
-Axes, canonical values only; omit an axis the sample cannot support:
+Axes, canonical values only; omit an axis the sample cannot support, except
+tech and language, where `generic` is the answer when nothing is specific:
 {vocab}
 - freshness: a four-digit year the contents imply, else omit
 - order: only `frequency` or `suspected-frequency`, and only from head and tail
@@ -340,8 +341,39 @@ def census(entries, tax):
 
 # --- the real model call -----------------------------------------------------
 
+SYSTEM = "You catalogue wordlists. Answer exactly as asked, with no preamble."
+
+
+class Exhausted(KeyboardInterrupt):
+    """The subscription's limit, reached mid-run. Inherits from KeyboardInterrupt
+    so the run keeps the batches it has already paid for and stops there."""
+
+
+def ask_cli(prompt, model, thinking="1024"):
+    """The subscription path: Claude Code headless. No tools and no system prompt
+    of its own, so the model is shown the qualification prompt and nothing else,
+    and runs outside this repo so no AGENTS.md or plugin of ours colours an intent.
+
+    Thinking is what buys a specific intent over an interchangeable one, and a
+    budget is what keeps a batch at twenty seconds rather than ninety.
+    """
+    cmd = ["claude", "-p", "--model", model, "--restricted", "--tools", "",
+           "--strict-mcp-config", "--no-session-persistence",
+           "--output-format", "json", "--system-prompt", SYSTEM]
+    r = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
+                       cwd=tempfile.gettempdir(),
+                       env={**os.environ, "MAX_THINKING_TOKENS": str(thinking)})
+    if r.returncode or not r.stdout.strip():
+        why = (r.stderr or r.stdout)[-400:]
+        raise (Exhausted(why) if re.search(r"(?i)limit|quota|rate", why) else RuntimeError(why))
+    out = json.loads(r.stdout)
+    if out.get("is_error"):
+        raise RuntimeError(str(out.get("result"))[:400])
+    return out["result"]
+
+
 def ask_api(prompt, model, tries=3):
-    """Messages API over the standard library: no SDK, no new dependency."""
+    """The metered path: Messages API over the standard library, no SDK."""
     body = json.dumps({"model": model, "max_tokens": 8192,
                        "messages": [{"role": "user", "content": prompt}]}).encode()
     req = urllib.request.Request(
@@ -398,12 +430,17 @@ def main(argv):
             # the model's intent through.
             entries[e["sig"]].pop("intent_from", None)
 
+    metered = "--api" in argv
+    thinking = q.get("thinking", 1024)
+    ask = ask_api if metered else lambda p, m: ask_cli(p, m, thinking)
+
     def confirm(est, batches, n):
-        print(f"{n} entries, {batches} batches, ~{est:,} input tokens")
+        print(f"{n} entries, {batches} batches, ~{est:,} input tokens, "
+              + ("billed to ANTHROPIC_API_KEY" if metered else "on this machine's subscription"))
         return "--yes" in argv or input("proceed? [y/N] ").strip().lower() == "y"
 
     deltas, report = qualify(
-        pool, tax, None if "--harvest-only" in argv else ask_api, docs=docs,
+        pool, tax, None if "--harvest-only" in argv else ask, docs=docs,
         routing=q.get("routing") or {"default": MODEL}, batch=q.get("batch", BATCH),
         confirm=confirm, log=lambda m: print(m, flush=True))
 

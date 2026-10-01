@@ -21,11 +21,13 @@ import yaml
 
 import catalog
 from qualify import MODEL as CHEAP
-from qualify import ask_api, doc_for, harvest, load_taxonomy, qualify
+from qualify import ask_api, ask_cli, doc_for, harvest, load_taxonomy, qualify
 
 STRONG, JUDGE = "claude-sonnet-5-5", "claude-opus-5-5"
 HARD = ("Fuzzing/XSS", "Fuzzing/LFI", "Payloads", "Pattern-Matching")
 LOT, SEED, ESCALATE = 30, 20261001, 6
+# The subscription by default, the metered key with --api.
+ASK = ask_api if "--api" in sys.argv else ask_cli
 
 SCORE = """\
 A wordlist was described by an analyst who had its documentation, and by a model
@@ -67,7 +69,7 @@ def draw(entries, docs):
 def run(lot, model, show_name, tax):
     """One lot, one model, one condition. No harvested text reaches the model."""
     blank = [{**e, "intent": "TODO"} for e in lot]
-    deltas, report = qualify(blank, {**tax, "distinctness": 0}, ask_api,
+    deltas, report = qualify(blank, {**tax, "distinctness": 0}, ASK,
                              routing={"default": model}, show_name=show_name,
                              log=lambda m: print(f"    {m}", flush=True))
     print(f"    {len(deltas)} answered, {len(report['rejected'])} rejected")
@@ -75,7 +77,7 @@ def run(lot, model, show_name, tax):
 
 
 def judge(prompt):
-    return ask_api(prompt, JUDGE).strip()[:1]
+    return ASK(prompt, JUDGE).strip()[:1]
 
 
 def main():
@@ -155,7 +157,7 @@ def main():
             if key[0] == "hard" and sig in deltas:
                 print(f"    {'/'.join(key[1:])}: {deltas[sig]['intent']}")
         best = qualify([{**by_sig[sig], "intent": "TODO"}], {**tax, "distinctness": 0},
-                       ask_api, routing={"default": JUDGE}, show_name=False)[0]
+                       ASK, routing={"default": JUDGE}, show_name=False)[0]
         for d in best.values():
             print(f"    {JUDGE}/blind: {d['intent']}")
 

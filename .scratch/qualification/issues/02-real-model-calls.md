@@ -44,4 +44,20 @@ get the same sentence back. A `hand` intent refuses to be requalified without
 rather than being quietly ignored. An interrupt keeps the batches already
 answered and says to rerun.
 
-The real run needs `ANTHROPIC_API_KEY`, which this environment has not got.
+**Two model paths, the subscription by default.** `ask_cli` runs Claude Code
+headless (`claude -p`) with no tools, no system prompt of its own and a working
+directory outside this repo, so the model sees the qualification prompt and
+nothing else, and the run bills against the machine's subscription instead of a
+key. `--api` switches to `ask_api` and the metered key. Both go through the seam
+from 01 unchanged.
+
+Measured on the subscription, against real entries: `--tools ""` cut the system
+prompt from 13.5K to 2.7K tokens a call, and a thinking budget of 1024 (config,
+`qualify.thinking`) holds a batch of ten at twenty seconds against ninety
+unbudgeted — thinking is what separates a specific intent from an
+interchangeable one, so it is budgeted rather than switched off. Six real
+`Discovery/DNS` entries qualified in 15 seconds, six distinct intents, each
+visibly read from the sample. At that rate the remaining 1,362 are about 45
+minutes. A subscription limit reached mid-run raises `Exhausted`, which the run
+treats as an interrupt: it keeps the batches already paid for and says to
+rerun.

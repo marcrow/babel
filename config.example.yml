@@ -21,6 +21,9 @@ sources:
 # the model that handles it. One model for everything until it says otherwise.
 qualify:
   batch: 10
+  # Thinking is what separates a specific intent from an interchangeable one.
+  # 0 is fast and flat; 1024 keeps a batch at twenty seconds. Ignored with --api.
+  thinking: 1024
   routing:
     default: claude-haiku-4-5-20251001
     # Payloads: claude-sonnet-5-5
