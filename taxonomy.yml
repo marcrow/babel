@@ -13,7 +13,8 @@ axes:
          sybase, graphql, soap, wsdl, ssti, xml, json, ldap, smb, ftp, ssh,
          smtp, snmp, dns, voip, windows, linux, unix, macos, android, ios,
          docker, kubernetes, aws, azure, gcp, cisco, fortinet, citrix, vmware,
-         sap, iot, scada]
+         sap, iot, scada, prometheus, keycloak, kafka, rabbitmq, zookeeper,
+         consul, solr, nagios, zabbix, splunk, phpmyadmin, webmin, cpanel]
 
   provenance: [curated, real-world, generated, leaked]
 
@@ -89,6 +90,10 @@ aliases:
   osx: macos
   "ms-sharepoint": sharepoint
   java-ee: java
+  springboot: spring
+  spring-boot: spring
+  oracleas: oracle
+  actuator: spring
   j2ee: java
   none: generic
   any: generic

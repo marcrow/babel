@@ -25,11 +25,24 @@ PROMPT = """\
 These are wordlists installed on one machine. For each entry below, say what it
 is for, judging from its contents.
 
-Write for an agent choosing a wordlist mid-mission. State what the entry
-enumerates and what a hit means: words that look like directories are not known
-directories. Name the technology, corpus, tool or research the sample points at.
-One or two sentences, no hedging, no describing the file as a file. Two entries
-must never get the same sentence. Never use these words: {banned}.
+Write for an agent choosing between this entry and a neighbouring one. An intent
+that would fit any other entry aimed at the same thing is a failed intent, so
+each one must carry the fact that distinguishes this entry: the corpus, tool,
+vendor or research it came from, how it was ordered, how wide it reaches, what it
+deliberately leaves out. Say what a hit means, because words that look like
+directories are not known directories. One or two sentences, no hedging, and
+never these words: {banned}.
+
+This is the shape of an intent, written about a wordlist that is not in this
+catalog. Imitate how it works, never its words, and never write about anything
+it names:
+
+  The 400-odd Belgian town names, in Dutch and French spellings both; a hit is
+  a plausible branch-office hostname, which is why the French spellings matter
+  on a Walloon target and nowhere else.
+
+Each entry stands alone: never refer to another entry in this batch, by number or
+otherwise, and never number your intent.
 
 The scan has already established the facts stated with each entry. Do not repeat
 them and do not contradict them.
@@ -86,11 +99,20 @@ def validate(tax, got, entry):
     return axes, None
 
 
+EXAMPLE = ("belgian town names", "branch-office hostname", "walloon target",
+           "dutch and french spellings")
+
+
 def bad_intent(tax, intent):
     """Why an intent is not worth having, if it is not. Applied to every intent
     that reaches the catalog, whoever wrote it."""
     if len(intent) < tax.get("min_intent", 30):
         return "intent too short to be worth having"
+    flat = " ".join(intent.lower().split())
+    if any(bit in flat for bit in EXAMPLE):
+        return "copied the prompt's example instead of reading the sample"
+    if re.search(r"(?i)\bentry (number )?\d|\bthe (first|second|third) entry\b", intent):
+        return "refers to another entry in its batch"
     for w in tax.get("banned", []):
         if re.search(r"\b" + re.escape(w) + r"\b", intent, re.I):
             return f"filler vocabulary: {w!r}"

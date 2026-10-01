@@ -49,5 +49,31 @@ results reported per category and per condition and never averaged, six
 escalations printed for the operator, and the outcome written to `routing.yml`,
 which `qualify.py` prefers over `config.yml`.
 
-Only the draw has been exercised. Running it needs `ANTHROPIC_API_KEY` and costs
-money, so it is the operator's to run. No tests, by the decision in the spec.
+The harness itself has not been run. What *has* been run, on the subscription, is
+a hand-sized version of its two lots with the cheap model, 26 live calls in all,
+and it has already paid for itself three times over:
+
+- **Contamination looks low.** Eight documented entries, named against blind:
+  blind recovered `html5sec` in `XSS-Jhaddix.txt`, the Tomcat manager, Spring
+  Boot actuators and Oracle from the sample alone. The named condition won
+  clearly twice out of eight (`Oracle-EBS`, where the filename carries "EBS").
+- **The hard lot did not break it,** against the spec's own expectation. Ten
+  blind entries from `Fuzzing/XSS`, `Fuzzing/LFI`, `Payloads`,
+  `Pattern-Matching` and the Burp `.pay` probes: ten answers, no rejections, all
+  specific. "Cheap model everywhere except the payload categories" is looking
+  like the wrong prediction.
+- **Two prompt failure modes caught, which would have reached all 1,362
+  entries.** Concrete examples in the prompt were copied verbatim — one entry
+  was handed the `accepted` example, another the `rejected` one — and entries
+  began referring to each other by batch position. The example is now about a
+  wordlist that does not exist, cross-references are rejected mechanically, and
+  so is any intent that reproduces the example.
+
+What this does not establish, and what the harness is still for: a scored
+comparison against the README arbiter, per category, with numbers. The residual
+risk is no longer vagueness but **confident embellishment** — a generic `raft-*`
+list was described as "refined toward WordPress, Joomla, and Drupal", which
+nothing in its sample supports. A mechanical gate cannot see that; only the
+scored lot can.
+
+No tests, by the decision in the spec.
