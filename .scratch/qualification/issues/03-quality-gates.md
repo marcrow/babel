@@ -41,3 +41,13 @@ with a stubbed model returning one sentence for every entry, in a copy of the
 tree under a scratch directory: distinctness 0.04, nothing written, exit
 non-zero. A year a README states survives even when the sentence around it is
 rejected, because the year is a fact about the entry and the sentence was not.
+
+**The banned list was tuned on evidence, twice.** `common` as a bare word
+rejected "the 500 most common passwords in the 2021 breach"; it is now the filler
+phrases `common terms`, `common words`, `common names`, `commonly used`.
+`wordlist` as a bare word rejected "a ZIP archive holding one text wordlist of
+23,000 Dutch words"; it is now the tautological openers `a wordlist of`,
+`this wordlist`, `wordlist containing`, `wordlist for`. The spec's own example,
+"a wordlist of common terms", is still refused twice over. `list of` stays banned
+as the spec asks, at a measured cost of roughly one entry in forty, which a
+rerun usually rephrases.

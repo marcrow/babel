@@ -106,7 +106,10 @@ mis-tagging a usable list hides it from every query.
 **target**:
 What the wordlist enumerates: directory, file, extension, parameter, api-route,
 subdomain, vhost, username, password, header, server-variable,
-injection-payload.
+injection-payload, security-answer, word, ip-address, port, hash, email, domain.
+`security-answer` carries the 161 entries of school, city and surname lists that
+answer a knowledge-based authentication question; `word` is the lexicon aimed at
+no particular slot, and is wrong wherever a more specific target fits.
 
 **tech**:
 The technology a wordlist is specific to, or `generic`.

@@ -47,9 +47,14 @@ Reply with one line per case, "number: digit", and nothing else.
 """
 
 PAIR = """\
-Each numbered case is two intents written for the same wordlist, from its
-contents alone. For each, say which would help an agent pick the right list
-mid-mission, judging specificity and whether it says what a hit means.
+Each numbered case is one wordlist's own contents, followed by two intents
+written about it. For each, say which intent would help an agent pick the right
+list mid-mission.
+
+Check every claim against the contents shown. A detail the contents do not
+support is worse than no detail: an invented origin, an invented ordering or an
+invented tool name should lose to a plainer sentence that is true. Length is not
+specificity. Judge what a hit is said to mean, and whether it is right.
 
 {cases}
 
@@ -92,6 +97,8 @@ def judge(template, cases):
     body = "\n\n".join(f"### {i}\n{cases[k]}" for i, k in enumerate(keys, 1))
     reply = ASK(template.format(cases=body), JUDGE)
     out = {}
+    if not re.search(r"\d\s*[:.)-]\s*[0-2AB=]", reply):
+        reply = ASK(template.format(cases=body), JUDGE)      # a refusal is often one-off
     for line in reply.splitlines():
         if m := re.match(r"\D*(\d+)\D+([0-2AB=])", line.strip()):
             n = int(m.group(1))
@@ -192,7 +199,10 @@ def main():
         cases = {}
         for sig in both:
             x, y = (b, a) if flipped[sig] else (a, b)
-            cases[sig] = f"A: {x[sig]['intent']}\n\nB: {y[sig]['intent']}"
+            # The judge sees the file, or it can only rank prose.
+            lines = [l[:160] for l in (by_sig[sig].get("sample") or [])[:14]]
+            cases[sig] = ("Contents:\n" + "\n".join("  " + l for l in lines)
+                          + f"\n\nA: {x[sig]['intent']}\n\nB: {y[sig]['intent']}")
         print(f"  judging cheap against strong, {show}: {len(cases)} cases", flush=True)
         for sig, v in judge(PAIR, cases).items():
             cat = by_sig[sig]["category"]

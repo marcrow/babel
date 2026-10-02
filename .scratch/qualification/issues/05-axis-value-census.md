@@ -23,3 +23,9 @@ nothing can fall outside it.
 
 It earned its keep immediately: it is what showed that harvested entries carried
 an intent and no `target`, which is why 01 now asks a model for their axes.
+
+The rehearsals gave it a second job: every unknown value a model offers is
+reported as a gap, with a count, so closing them is one edit rather than a
+hunt. That is how `security-answer` was found — 161 entries of school, city and
+surname lists that answer a knowledge-based question, and not one value in the
+`target` vocabulary fitted any of them.

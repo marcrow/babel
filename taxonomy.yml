@@ -1,8 +1,13 @@
 # Controlled vocabulary for the axes. Adding a value is one line here;
 # qualification rejects anything not listed rather than recording it.
 axes:
+  # `word` is the lexicon that aims at no particular slot — a dictionary, a list
+  # of surnames, the swear words — and is the wrong answer whenever a more
+  # specific target fits. The census is what keeps it from becoming a dumping
+  # ground.
   target: [directory, file, extension, parameter, api-route, subdomain, vhost,
-           username, password, header, server-variable, injection-payload]
+           username, password, header, server-variable, injection-payload,
+           security-answer, word, ip-address, port, hash, email, domain]
 
   tech: [generic, apache, nginx, iis, lighttpd, tomcat, jetty, jboss, weblogic,
          websphere, coldfusion, php, asp, aspnet, jsp, java, struts, spring,
@@ -15,7 +20,11 @@ axes:
          smtp, snmp, dns, voip, windows, linux, unix, macos, android, ios,
          docker, kubernetes, aws, azure, gcp, cisco, fortinet, citrix, vmware,
          sap, iot, scada, prometheus, keycloak, kafka, rabbitmq, zookeeper,
-         consul, solr, nagios, zabbix, splunk, phpmyadmin, webmin, cpanel]
+         consul, solr, nagios, zabbix, splunk, phpmyadmin, webmin, cpanel,
+         exchange, outlook, lotus, coldfusion-admin, processwire, kentico,
+         sitefinity, umbraco, dotnetnuke, modx, concrete5, silverstripe,
+         prestashop, dolibarr, liferay, cics, shopware, opencart, prestige,
+         c, cpp, csharp, rust, bash, powershell]
 
   # What an entry physically is. Absent means `wordlist`, so one grep for
   # "kind" lists every installed file that is not one.
@@ -70,6 +79,23 @@ aliases:
   env-var: server-variable
   environment-variable: server-variable
   payload: injection-payload
+  security-question: security-answer
+  security-answers: security-answer
+  knowledge-based-answer: security-answer
+  words: word
+  dictionary: word
+  lexicon: word
+  ip: ip-address
+  ipv4: ip-address
+  cidr: ip-address
+  ports: port
+  hashes: hash
+  password-hash: hash
+  emails: email
+  domains: domain
+  apex-domain: domain
+  registered-domain: domain
+  email-address: email
   payloads: injection-payload
   injection: injection-payload
 
@@ -80,6 +106,9 @@ aliases:
   httpd: apache
   "asp.net": aspnet
   "asp-net": aspnet
+  aspx: aspnet
+  cfm: coldfusion
+  cfml: coldfusion
   iis7: iis
   ms-sql: mssql
   sqlserver: mssql
@@ -164,7 +193,11 @@ aliases:
 # the failure, while "the 500 most common passwords in the 2021 breach" is the
 # kind of sentence this project exists to get. Measured on twenty live entries,
 # banning the bare word cost one good intent in twenty.
-banned: ["wordlist", "wordlists", "list of", "lists of", "common terms",
+# "wordlist" is banned where it is tautological -- an entry of this catalog is a
+# wordlist, so saying so says nothing -- but not mid-sentence, where "a ZIP
+# holding one text wordlist of Dutch words" is the useful thing to say.
+banned: ["a wordlist of", "this wordlist", "wordlist containing", "wordlist for",
+         "a list of", "list of", "lists of", "common terms",
          "common words", "common names", "commonly used", "various",
          "used for fuzzing", "assorted", "a variety of", "miscellaneous"]
 

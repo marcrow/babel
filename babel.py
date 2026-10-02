@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Scan wordlist sources and rebuild local.jsonl. Observes only; calls no model."""
-import fnmatch, hashlib, json, random, sys
+import fnmatch, hashlib, json, random, re, sys
 from collections import deque
 from pathlib import Path
 
@@ -9,7 +9,6 @@ import yaml
 import catalog
 
 HEAD, TAIL, RES = 30, 10, 60
-
 
 def shape_of(lines):
     def one(s):

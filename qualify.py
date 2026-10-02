@@ -6,7 +6,8 @@ vocabulary, batch splitting, the quality gates, README precedence and intent
 provenance all sit behind it. `ask` is injected by the caller, so the self-check
 exercises the whole spine without a network call.
 """
-import fnmatch, json, os, re, subprocess, sys, tempfile, time, urllib.error, urllib.request
+import fnmatch, json, os, random, re, subprocess, sys, tempfile, time, unicodedata
+import urllib.error, urllib.request
 from collections import Counter
 from pathlib import Path
 
@@ -50,17 +51,16 @@ them and do not contradict them.
 Axes, canonical values only; omit an axis the sample cannot support, except
 tech and language, where `generic` is the answer when nothing is specific:
 {vocab}
-- kind: omit it when the sample is a wordlist, which is what nearly all of them
-  are. Name it when the sample is plainly something else that happens to be
-  installed among them: `payload-file` for something delivered or uploaded whole,
-  a web shell or a crafted image; `source-code` for something compiled or run,
-  an exploit or a script that generates a list; `structured-data` when the whole file is
-  one document to parse, an XML tree or a JSON object — never because the lines
-  of a list happen to contain HTML or XML fragments, which is still a wordlist;
-  `binary` for anything compressed or not text at all. Say in the intent what it is and how it is used, and leave target
-  out when nothing is being enumerated. Do not guess from an extension: a `.php`
-  file holding one path per line is a wordlist, and a `.txt` file holding a shell
-  script is not.
+- kind: omit it. Nearly every entry is a wordlist, and a claim otherwise is
+  checked against the sample and dropped if the sample does not bear it out, so
+  name one only when the sample's first line opens a document or a program, or
+  the file holds one or two lines in all. Lines that merely contain markup, code
+  or paths are a wordlist, and a file holding one injection payload per line is a
+  wordlist whose target is injection-payload. The values are `payload-file` for a
+  single artefact delivered whole such as a web shell or a crafted image,
+  `source-code` for something compiled or run, `structured-data` for one document
+  to parse, `binary` for something compressed or not text. For such an entry, say
+  in the intent what it is and how it is used, and leave target out.
 - freshness: a four-digit year the contents imply, else omit
 - order: only `frequency` or `suspected-frequency`, and only from head and tail
 
@@ -86,63 +86,93 @@ def canonical(tax, axis, value):
 
 
 def validate(tax, got, entry):
-    """Axes for an entry, or a reason it stays TODO."""
-    axes, bad = {}, []
+    """Axes for an entry, a fatal reason it must stay TODO, and the values it
+    offered that the vocabulary does not hold.
+
+    A value outside the vocabulary is never recorded — that is what stops `PHP`
+    and `php` splitting one technology in two — but it no longer throws away the
+    sentence we paid for. It is reported as a gap, and a gap costs one line in
+    `taxonomy.yml`. Only three things are fatal: no usable intent, a wordlist
+    with nothing to enumerate, and a claim of not being a wordlist that the
+    sample does not bear out.
+    """
+    axes, gaps = {}, []
     for axis in MODEL_AXES:
         vals = got.get(axis) or []
         vals = [vals] if isinstance(vals, str) else vals
         for v in vals:
-            c = canonical(tax, axis, v)
-            if c:
+            if c := canonical(tax, axis, v):
                 axes.setdefault(axis, []).append(c)
             else:
-                bad.append(f"{axis}={v}")
-    if bad:
-        return None, "unknown axis value: " + ", ".join(bad)
+                gaps.append(f"{axis}={v}")
+    axes = {a: sorted(set(v)) for a, v in axes.items()}
+
     kind = canonical(tax, "kind", got.get("kind") or "wordlist")
     if not kind:
-        return None, f"unknown axis value: kind={got.get('kind')}"
-    if not axes.get("target") and kind == "wordlist":
-        return None, "no target"
-    if not supported(kind, entry):
-        return None, f"claims {kind} but the scan's sample does not support it"
-    axes = {a: sorted(set(v)) for a, v in axes.items()}
+        gaps.append(f"kind={got.get('kind')}")
+        kind = "wordlist"
     if kind != "wordlist":
-        axes["kind"] = kind        # absence means wordlist, so only oddities carry it
+        if supported(kind, entry):
+            axes["kind"] = kind
+        else:
+            # The claim goes, the sentence stays, and nothing is demanded of an
+            # entry whose nature is now in doubt.
+            gaps.append(f"kind={kind} unsupported by the sample")
+            kind = None
+    if kind == "wordlist" and not axes.get("target"):
+        return None, "no target", gaps
     if (o := got.get("order")) and entry.get("order", "unknown") == "unknown":
-        c = canonical(tax, "order", o)
-        if not c:
-            return None, f"unknown axis value: order={o}"
-        if c in ("frequency", "suspected-frequency"):
-            axes["order"] = c          # `alphabetical` is the scan's to prove
+        if c := canonical(tax, "order", o):
+            if c in ("frequency", "suspected-frequency"):
+                axes["order"] = c          # `alphabetical` is the scan's to prove
+        else:
+            gaps.append(f"order={o}")
     if re.fullmatch(r"(19|20)\d\d", str(got.get("freshness", "")).strip()):
         axes["freshness"] = str(got["freshness"]).strip()
-    return axes, None
+    return axes, None, gaps
+
+
+# A file of code or markup announces itself on its first line. This is a veto on
+# a model's claim, never a decision of its own: tried as a decision over the whole
+# catalog it called 103 wordlists `payload-file`, `nmap-ports-top1000.txt` among
+# them, because a list can hold one long line and a wordlist can hold accents that
+# are not valid UTF-8.
+CODEY = re.compile(r"""\s*(\#!|<\?|<%|<!--|<html|\#include|/\*|//[ \t]|
+                          import |package |using |function |class |def |\$\w+\s*=)""", re.I | re.X)
+DOCUMENT = re.compile(r"\s*(<\?xml|<!DOCTYPE|<html)", re.I)
+
+
+def supported(kind, entry):
+    """Whether the scan's own sample bears out a claim that this is not a wordlist.
+
+    `//` has to be followed by a space to count as a comment, or every
+    protocol-relative URL in a wordlist reads as source code. Binary is measured
+    as a density of undecodable bytes, not a count of lines carrying one, because
+    a Dutch wordlist carries accents and a one-line GIF only yields three lines
+    of sample.
+    """
+    sample = [l for l in entry.get("sample") or []]
+    head = next((l for l in sample if l.strip()), "")
+    if kind == "structured-data":
+        return bool(DOCUMENT.match(head))
+    if kind in ("payload-file", "source-code"):
+        return bool(CODEY.match(head)) or (entry.get("lines") or 0) <= 2
+    if kind == "binary":
+        # Measured over the installed corpus: the eight genuinely binary files
+        # (a GIF, a JPEG, an SWF, nc.exe, cmd.war, two archives, a ZIP posing as
+        # a .tx_) all sit above 56% undecodable or control bytes, and the next
+        # entry down is a password list at 1.72%. The threshold sits in that gap.
+        text = "".join(sample)
+        if not text:
+            return False
+        odd = sum(c == "\ufffd" or (unicodedata.category(c) in ("Cc", "Co", "Cn") and c != "\t")
+                  for c in text)
+        return odd / len(text) > 0.20
+    return True
 
 
 EXAMPLE = ("belgian town names", "branch-office hostname", "walloon target",
            "dutch and french spellings")
-
-
-# A file of code or markup announces itself on its first line. A list of payloads
-# does not, however much markup each of its lines contains.
-CODEY = re.compile(r"""\s*(\#!|<\?|<%|<!--|<html|\#include|//|/\*|import |package |using |
-                          function |class |def |\$\w+\s*=)""", re.I | re.X)
-DOCUMENT = re.compile(r"\s*(<\?xml|<!DOCTYPE|<html|[{\[])", re.I)
-
-
-def supported(kind, entry):
-    """Whether the scan's own sample backs a claim that an entry is not a wordlist.
-    Mis-tagging a usable list hides it from every query, which is worse than
-    leaving it TODO, so a claim the sample cannot support is refused."""
-    head = (entry.get("sample") or [""])[0]
-    if kind == "structured-data":
-        return bool(DOCUMENT.match(head))
-    if kind in ("payload-file", "source-code"):
-        return bool(CODEY.match(head)) or (entry.get("lines") or 0) <= 3
-    if kind == "binary":
-        return any("\ufffd" in line for line in entry.get("sample") or [])
-    return True
 
 
 def bad_intent(tax, intent):
@@ -243,6 +273,8 @@ def prompt_for(tax, batch, show_name=True):
         size = f"lines: {e['lines']}" if "lines" in e else f"files: {e.get('files', '?')}"
         facts = f"{size}  shape: {'/'.join(e.get('shape') or ['unknown'])}  " \
                 f"case: {e.get('case', 'unknown')}  order: {e.get('order', 'unknown')}"
+        if e.get("kind"):
+            facts += f"  kind: {e['kind']}  (not a wordlist)"
         lines = [l[:CLIP] + " …clipped" if len(l) > CLIP else l for l in e.get("sample", [])]
         out.append("\n".join(head + [facts, "sample:"] + ["  " + l for l in lines]))
     return "\n\n".join(out)
@@ -287,6 +319,7 @@ def qualify(samples, taxonomy, ask, docs=(), routing=None, batch=BATCH,
     """
     tax, routing = taxonomy, routing or {}
     deltas, rejected, todo, skipped = {}, [], [], 0
+    missing = Counter()      # values offered that the vocabulary does not hold
 
     # Pass two: the intents a human already wrote. A sentence two entries share
     # is not an intent for either of them, so both fall through to the model.
@@ -325,7 +358,7 @@ def qualify(samples, taxonomy, ask, docs=(), routing=None, batch=BATCH,
                     for c in (group[i:i + batch] for i in range(0, len(group), batch))]
     est = sum(len(p) for _, _, p in batches) // 4
     report = {"seen": len(samples), "skipped": skipped, "harvested": harvested,
-              "from_model": 0, "rejected": rejected, "est_tokens": est,
+              "from_model": 0, "rejected": rejected, "gaps": missing, "est_tokens": est,
               "distinctness": 1.0, "interrupted": False, "declined": False, "ok": True}
 
     if ask is None or not batches:
@@ -356,7 +389,8 @@ def qualify(samples, taxonomy, ask, docs=(), routing=None, batch=BATCH,
             if writing and (why := bad_intent(tax, intent)):
                 rejected.append((e["name"], why))
                 continue
-            axes, why = validate(tax, g, e)
+            axes, why, gaps = validate(tax, g, e)
+            missing.update(gaps)
             if why:
                 rejected.append((e["name"], why))
                 continue
@@ -457,6 +491,12 @@ def ask_api(prompt, model, tries=3):
 
 # --- the caller --------------------------------------------------------------
 
+def ensure_axes(delta):
+    return "  ".join(f"{a}={delta[a]}" for a in
+                     ("kind", "target", "tech", "provenance", "language", "order", "freshness")
+                     if a in delta)
+
+
 def main(argv):
     cfg = yaml.safe_load(Path("config.yml").read_text())
     tax = load_taxonomy()
@@ -494,6 +534,18 @@ def main(argv):
             # the model's intent through.
             entries[e["sig"]].pop("intent_from", None)
 
+    # A sample is a rehearsal: a fixed seed so it can be repeated after a fix, a
+    # fresh seed so a fix can be validated on entries never seen before, and
+    # nothing written to the catalog either way.
+    sample = None
+    if (i := next((n for n, a in enumerate(argv) if a == "--sample"), None)) is not None:
+        size = int(argv[i + 1])
+        seed = int(argv[argv.index("--seed") + 1]) if "--seed" in argv else 0
+        todo = [e for e in pool if e["intent"] == "TODO"]
+        pool = random.Random(seed).sample(todo, min(size, len(todo)))
+        sample = (size, seed)
+        print(f"rehearsal on {len(pool)} of {len(todo)} unqualified entries, seed {seed}\n")
+
     metered = "--api" in argv
     thinking = q.get("thinking", 1024)
     ask = ask_api if metered else lambda p, m: ask_cli(p, m, thinking)
@@ -508,11 +560,32 @@ def main(argv):
         routing=q.get("routing") or {"default": MODEL}, batch=q.get("batch", BATCH),
         confirm=confirm, log=lambda m: print(m, flush=True))
 
+    # An entry whose harvested sentence was refused and which a model then wrote
+    # is not a loss, so coverage is counted over entries, never over refusals.
+    carried = {sig for sig, d in deltas.items() if "intent" in d}
+    left = [e["name"] for e in pool if e["sig"] not in carried
+            and e.get("intent", "TODO") == "TODO"]
     print(f"\n{report['harvested']} harvested, {report['from_model']} from a model, "
-          f"{report['skipped']} already qualified, {len(report['rejected'])} rejected")
+          f"{report['skipped']} already qualified")
+    if pool:
+        print(f"{len(carried)} of {len(pool)} entries carry an intent "
+              f"({len(carried) / len(pool):.0%}); {len(left)} left TODO")
     print(f"distinctness {report['distinctness']} (threshold {tax['distinctness']})")
     for name, why in report["rejected"]:
-        print(f"  ! {name}: {why}")
+        print(f"  {'!' if name in left else '-'} {name}: {why}")
+    if report["gaps"]:
+        print("\nvalues offered that taxonomy.yml does not hold; each is one line to add,"
+              "\nand the entry was kept without it:")
+        for value, n in report["gaps"].most_common():
+            print(f"  {n:4}  {value}")
+    if sample:
+        kinds = Counter(entries[sig].get("kind", "wordlist") for sig in deltas)
+        print(f"\nkind: {dict(kinds)}")
+        for sig, d in sorted(deltas.items(), key=lambda kv: entries[kv[0]]["name"]):
+            print(f"\n  {entries[sig]['name']}  [{entries[sig].get('category')}]"
+                  f"\n    {d.get('intent', '(axes only)')}"
+                  f"\n    {ensure_axes(d)}")
+        sys.exit(0 if report["ok"] else "the distinctness gate would have failed this run")
     if report["declined"]:
         sys.exit("declined, nothing written")
     if not report["ok"]:
@@ -553,9 +626,16 @@ def selftest():
     assert d["s1"]["intent_from"] == "model" and d["s1"]["freshness"] == "2015"
     assert r["ok"] and r["from_model"] == 1 and not r["rejected"]
 
-    # an unknown axis value is rejected: the entry stays TODO and is named
-    d, r = qualify([entry("s2", "b.txt")], tax, ask_with({**GOOD, "tech": ["cobol"]}))
-    assert d == {} and r["rejected"][0][0] == "b.txt" and "cobol" in r["rejected"][0][1], r
+    # a value outside the vocabulary is never recorded, but it no longer costs
+    # the whole entry: it is reported as a gap to close with one line
+    d, r = qualify([entry("s2", "b.txt")], tax, ask_with({**GOOD, "tech": ["cobol", "php"]}))
+    assert d["s2"]["tech"] == ["php"], "the unknown value must not be recorded"
+    assert d["s2"]["intent"] and not r["rejected"], r
+    assert r["gaps"]["tech=cobol"] == 1, r["gaps"]
+
+    # the three fatal cases keep an entry at TODO, and name it
+    d, r = qualify([entry("s2b", "b2.txt")], tax, ask_with({**GOOD, "target": ["cobol"]}))
+    assert d == {} and r["rejected"][0][1] == "no target" and r["gaps"]["target=cobol"] == 1
 
     # banned filler vocabulary is rejected
     d, r = qualify([entry("s3", "c.txt")], tax, ask_with(
@@ -690,39 +770,40 @@ def selftest():
         back = catalog.read(f)
     assert set(back) == {"u1", "u2"} and back["u1"]["sample"] == ["a\u2028b", "c\x85d"]
 
-    # a list of payloads is a wordlist, whatever its lines look like
-    d, r = qualify([entry("x6", "XSS-Jhaddix.txt", lines=110,
-                          sample=["'\"--></style></script><script>alert(1)</script>"])],
-                   tax, ask_with({**GOOD, "target": ["injection-payload"], "kind": "payload-file"}))
-    assert d == {} and "payload-file" in r["rejected"][0][1], r
-
-    # an entry that is not a wordlist at all is kept, marked, and needs no target
-    shell = {"n": 1, "kind": "WebShell", "tech": ["php"],
+    # an entry that is not a wordlist is marked, owes no target, and says in its
+    # intent what it is instead
+    shell = {"n": 1, "tech": ["php"], "kind": "WebShell",
              "intent": "A single-file PHP backdoor that shells out through $_GET; it is uploaded "
                        "to a target, never fuzzed with."}
-    d, r = qualify([entry("x1", "cmd.php", sample=["<?php system($_GET['cmd']); ?>"])],
-                   tax, ask_with(shell))
+    d, r = qualify([entry("x1", "cmd.php", lines=17,
+                          sample=["<?php system($_GET['cmd']); ?>"])], tax, ask_with(shell))
     assert d["x1"]["kind"] == "payload-file" and "target" not in d["x1"], d["x1"]
-    assert not r["rejected"], r["rejected"]
+    assert not r["rejected"], r
 
-    # one value answered as a list of one is the same value
-    d, _ = qualify([entry("o1", "top-1000.txt")], tax,
-                   ask_with({**GOOD, "order": ["frequency"], "kind": ["wordlist"]}))
-    assert d["o1"]["order"] == "frequency" and "kind" not in d["o1"], d["o1"]
+    # a claim the sample does not bear out costs the claim, not the entry: a list
+    # of payloads stays a wordlist and keeps the sentence we paid for
+    d, r = qualify([entry("x1b", "XSS-Jhaddix.txt", lines=110,
+                          sample=["'\"--></style></script><script>alert(1)</script>"])],
+                   tax, ask_with({**GOOD, "target": ["injection-payload"],
+                                  "kind": "payload-file"}))
+    assert "kind" not in d["x1b"] and d["x1b"]["target"] == ["injection-payload"], d["x1b"]
+    assert not r["rejected"] and r["gaps"]["kind=payload-file unsupported by the sample"] == 1
 
-    # a claim of structured-data has to be supported by the sample the scan took
-    d, r = qualify([entry("x4", "payloads.txt", sample=["<img src=x onerror=alert(1)>"])],
-                   tax, ask_with({**GOOD, "kind": "structured-data"}))
-    assert d == {} and "does not support it" in r["rejected"][0][1], r
-    d, r = qualify([entry("x5", "vectors.xml", sample=['<?xml version="1.0"?>', "<xss/>"])],
-                   tax, ask_with({**GOOD, "kind": "structured-data"}))
-    assert d["x5"]["kind"] == "structured-data", d
+    # and when it claims one with no target either, the entry is still kept
+    d, r = qualify([entry("x1c", "ports.txt", lines=900, sample=["80,443,8080"])],
+                   tax, ask_with({"n": 1, "kind": "payload-file", "provenance": ["curated"],
+                                  "intent": "Every port nmap probes by default, on one comma-joined "
+                                            "line, pasted into -p rather than iterated."}))
+    assert d["x1c"]["intent"].startswith("Every port") and "target" not in d["x1c"], d["x1c"]
 
-    # a wordlist still owes a target, and an unknown kind is rejected like any value
+    # binary is measured, so a GIF is one and an accented wordlist is not
+    assert supported("binary", {"sample": ["GIF89a\x00\x01\ufffd\x00\x02\x00\x00\x01" * 4]})
+    assert not supported("binary", {"sample": ["wonderschoon", "daarnaast", "caf\ufffd"] * 40
+                                    + ["x" * 400]}), "an accented wordlist is not binary"
+
+    # a wordlist still owes a target
     d, r = qualify([entry("x2", "y.txt")], tax, ask_with({**GOOD, "target": []}))
     assert d == {} and r["rejected"][0][1] == "no target", r
-    d, r = qualify([entry("x3", "z.txt")], tax, ask_with({**GOOD, "kind": "spreadsheet"}))
-    assert d == {} and "kind=spreadsheet" in r["rejected"][0][1], r
 
     # the census counts what the vocabulary is actually carrying
     axes = {a["axis"]: a for a in census(

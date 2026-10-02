@@ -57,6 +57,20 @@ Intent provenance is `intent_from`: `harvested`, `model` or `hand`. A model neve
 writes over the first or the last, enforced in `qualify` for intents harvested in
 the same run and in `catalog.merge` for intents already in the catalog.
 
+**A second deliberate deviation, measured rather than reasoned.** The checkbox
+says an axis value outside the vocabulary leaves the entry at `TODO`. Rehearsed
+on live samples, that cost 30% of entries, and five refusals in six were this
+project's fault rather than the model's: `laravel` and `symfony` missing from the
+vocabulary, a single-valued axis answered as a list of one, `common` banned as a
+bare word. Throwing away the sentence — the only thing a model is paid for —
+because a category word is missing from our own file is the wrong trade. So an
+unknown value is still never recorded, which is what keeps `PHP` and `php` from
+splitting one technology in two, but it is reported as a gap and the entry is
+kept. Three things remain fatal: no usable intent, a wordlist with nothing to
+enumerate, and a claim of not being a wordlist that the sample contradicts.
+Coverage went 81% → 90% → 95% → 98% on one fixed sample, and 95% and 100% on two
+samples never seen before.
+
 **One deliberate deviation from the checkbox above.** An entry whose intent is
 `harvested` or `hand` *is* sent to a model, for the axes it is missing and never
 for its intent, which is neither shown to the model nor replaceable by it. The
