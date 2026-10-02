@@ -76,7 +76,10 @@ def load_taxonomy(path="taxonomy.yml"):
 # --- controlled vocabulary ---------------------------------------------------
 
 def canonical(tax, axis, value):
-    """The canonical value, or None if it is outside the vocabulary."""
+    """The canonical value, or None if it is outside the vocabulary. A model asked
+    for one value often answers with a list of one, which is the same answer."""
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        value = value[0]
     v = re.sub(r"\s+", "-", str(value).strip().lower())
     v = tax.get("aliases", {}).get(v, v)
     return v if v in tax["axes"][axis] else None
@@ -701,6 +704,11 @@ def selftest():
                    tax, ask_with(shell))
     assert d["x1"]["kind"] == "payload-file" and "target" not in d["x1"], d["x1"]
     assert not r["rejected"], r["rejected"]
+
+    # one value answered as a list of one is the same value
+    d, _ = qualify([entry("o1", "top-1000.txt")], tax,
+                   ask_with({**GOOD, "order": ["frequency"], "kind": ["wordlist"]}))
+    assert d["o1"]["order"] == "frequency" and "kind" not in d["o1"], d["o1"]
 
     # a claim of structured-data has to be supported by the sample the scan took
     d, r = qualify([entry("x4", "payloads.txt", sample=["<img src=x onerror=alert(1)>"])],

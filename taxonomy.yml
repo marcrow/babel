@@ -6,7 +6,8 @@ axes:
 
   tech: [generic, apache, nginx, iis, lighttpd, tomcat, jetty, jboss, weblogic,
          websphere, coldfusion, php, asp, aspnet, jsp, java, struts, spring,
-         python, django, flask, ruby, rails, nodejs, perl, cgi, dotnet, golang,
+         python, django, flask, fastapi, ruby, rails, nodejs, express, perl, cgi,
+         dotnet, golang, laravel, symfony, codeigniter, cakephp, zend, nextjs,
          wordpress, joomla, drupal, magento, typo3, sharepoint, confluence,
          jira, jenkins, gitlab, grafana, kibana, elasticsearch, redis, mongodb,
          mysql, mssql, oracle, postgresql, sqlite, db2, informix, firebird,
@@ -159,7 +160,12 @@ aliases:
 
 # Filler an intent may not contain: an intent that could have been written
 # without opening the file is a failed intent. Matched on word boundaries.
-banned: ["wordlist", "wordlists", "list of", "lists of", "common", "various",
+# `common` is banned as filler, not as a word: "a wordlist of common terms" is
+# the failure, while "the 500 most common passwords in the 2021 breach" is the
+# kind of sentence this project exists to get. Measured on twenty live entries,
+# banning the bare word cost one good intent in twenty.
+banned: ["wordlist", "wordlists", "list of", "lists of", "common terms",
+         "common words", "common names", "commonly used", "various",
          "used for fuzzing", "assorted", "a variety of", "miscellaneous"]
 
 # An axis with no vocabulary: freshness is the four-digit year the contents

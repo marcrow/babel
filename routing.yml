@@ -1,0 +1,4 @@
+routing:
+  Fuzzing: claude-sonnet-5-5
+  Payloads: claude-sonnet-5-5
+  default: claude-haiku-4-5-20251001

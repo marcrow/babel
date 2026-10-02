@@ -13,7 +13,7 @@ path is reciting a corpus, and will fail on the 98% of entries that are obscure.
 
 Runs once to produce `routing.yml`, then it is dead code. No tests, by decision.
 """
-import json, random, sys
+import json, random, re, sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -29,29 +29,32 @@ LOT, SEED, ESCALATE = 30, 20261001, 6
 # The subscription by default, the metered key with --api.
 ASK = ask_api if "--api" in sys.argv else ask_cli
 
+# The judge is asked once per lot rather than once per entry: a hundred and ninety
+# sequential calls to the strongest model is an afternoon, and the information is
+# the same.
 SCORE = """\
-A wordlist was described by an analyst who had its documentation, and by a model
-that saw only its contents. Score the model against the analyst, 0 to 2:
+Each numbered case is one wordlist, described by an analyst who had its
+documentation and by a model that saw only its contents. Score each model against
+its own analyst, 0 to 2:
 
 2 — says what the analyst says, and is specific enough to choose on
 1 — broadly right but vaguer or partly wrong
 0 — wrong, or so generic it would fit any wordlist
 
-Analyst: {truth}
+{cases}
 
-Model: {candidate}
-
-Reply with one digit and nothing else.
+Reply with one line per case, "number: digit", and nothing else.
 """
 
 PAIR = """\
-Two intents written for the same wordlist, written from its contents alone. Which
-would help an agent pick the right list mid-mission? Judge specificity and
-whether it says what a hit means. Reply with A, B, or = and nothing else.
+Each numbered case is two intents written for the same wordlist, from its
+contents alone. For each, say which would help an agent pick the right list
+mid-mission, judging specificity and whether it says what a hit means.
 
-A: {a}
+{cases}
 
-B: {b}
+Reply with one line per case, "number: A" or "number: B" or "number: =", and
+nothing else.
 """
 
 
@@ -62,8 +65,10 @@ def draw(entries, docs):
     burp = sorted((e for e in entries if e["name"].endswith(".pay")), key=lambda e: e["sig"])
     hard = sorted((e for e in entries if e["category"].startswith(HARD) and not doc_for(docs, e)),
                   key=lambda e: e["sig"])
+    # A third of the hard lot is the weakly-memorised probe, whatever the lot size.
+    probe = min(LOT // 3, len(burp))
     return (rng.sample(documented, min(LOT, len(documented))),
-            rng.sample(hard, min(LOT - 10, len(hard))) + rng.sample(burp, min(10, len(burp))))
+            rng.sample(hard, min(LOT - probe, len(hard))) + rng.sample(burp, probe))
 
 
 def run(lot, model, show_name, tax):
@@ -76,12 +81,77 @@ def run(lot, model, show_name, tax):
     return deltas
 
 
-def judge(prompt):
-    return ASK(prompt, JUDGE).strip()[:1]
+def judge(template, cases):
+    """One call for a whole lot: {key: verdict} for the cases it answered.
+
+    The judge does not keep to one shape between calls, and a parse that quietly
+    returns nothing deletes a whole condition from the measurement, so this reads
+    loosely, falls back on order, and says so when it still comes up short.
+    """
+    keys = list(cases)
+    body = "\n\n".join(f"### {i}\n{cases[k]}" for i, k in enumerate(keys, 1))
+    reply = ASK(template.format(cases=body), JUDGE)
+    out = {}
+    for line in reply.splitlines():
+        if m := re.match(r"\D*(\d+)\D+([0-2AB=])", line.strip()):
+            n = int(m.group(1))
+            if 1 <= n <= len(keys):
+                out[keys[n - 1]] = m.group(2)
+    if not out:                                  # answered in some other shape
+        tokens = re.findall(r"(?<![\w])([0-2AB=])(?![\w])", reply)
+        if len(tokens) == len(keys):
+            out = dict(zip(keys, tokens))
+    if len(out) < len(keys):
+        print(f"    ! judge parsed {len(out)} of {len(keys)}: {reply[:100]!r}", flush=True)
+    return out
+
+
+def saved():
+    """The eight conditions as the last run left them, keyed as it keyed them."""
+    cal = json.load(Path("calibration.json").open())
+    out = {}
+    for key, intents in cal["intents"].items():
+        lot_name, model, show = key.split("|")
+        out[lot_name, model, show] = {sig: {"intent": i} for sig, i in intents.items()}
+    return out, cal["names"]
+
+
+def decide(scores, wins):
+    """The routing, from evidence rather than from one judge call: four
+    observations at least, and a margin rather than a single win.
+
+    The head-to-head is aggregated at the top-level category. `Fuzzing/XSS/
+    human-friendly`, `/robot-friendly` and `/Polyglots` are siblings of one
+    family, and twenty entries cannot say anything about each of them alone;
+    routing matches by prefix, so one line covers the family.
+    """
+    routing = {"default": CHEAP}
+    family = defaultdict(lambda: [0, 0])
+    for (show, cat), (c, s, _) in wins.items():
+        if show == "blind":
+            top = family[cat.split("/")[0]]
+            top[0] += c
+            top[1] += s
+    for cat, (c, s) in family.items():
+        if c + s >= 4 and s >= c + 2:
+            routing[cat] = STRONG
+    for (model, show, cat), vals in scores.items():
+        if (model, show) == (CHEAP, "blind") and len(vals) >= 4 and sum(vals) / len(vals) < 1.5:
+            routing[cat] = STRONG
+    return routing
 
 
 def main():
     tax, entries = load_taxonomy(), catalog.read(catalog.LOCAL)
+    if "--route-only" in sys.argv:
+        # Re-derive the decision from the measurement already paid for.
+        cal = json.load(Path("calibration.json").open())
+        scores = {tuple(k.split("|")): v for k, v in cal["scores"].items()}
+        wins = {(k.split("|")[0], k.split("|")[1]): v for k, v in cal["wins"].items()}
+        routing = decide(scores, wins)
+        Path("routing.yml").write_text(yaml.safe_dump({"routing": routing}, sort_keys=True))
+        print(yaml.safe_dump({"routing": routing}, sort_keys=True))
+        return
     pool = catalog.with_samples(entries, catalog.read(catalog.SAMPLES))
     cfg = yaml.safe_load(Path("config.yml").read_text())
     docs = harvest(s["path"] for s in cfg["sources"])
@@ -91,34 +161,43 @@ def main():
 
     # Keyed by the three things that vary, never by a string to be re-parsed.
     out, scores = {}, defaultdict(list)
-    for lot_name, lot in (("documented", documented), ("hard", hard)):
-        for model in (CHEAP, STRONG):
-            for show in ("named", "blind"):
-                print(f"  {lot_name}/{model}/{show}", flush=True)
-                out[lot_name, model, show] = run(lot, model, show == "named", tax)
+    if "--rejudge" in sys.argv:
+        out, _ = saved()
+        print(f"rejudging {sum(len(d) for d in out.values())} intents already paid for")
+    else:
+        for lot_name, lot in (("documented", documented), ("hard", hard)):
+            for model in (CHEAP, STRONG):
+                for show in ("named", "blind"):
+                    print(f"  {lot_name}/{model}/{show}", flush=True)
+                    out[lot_name, model, show] = run(lot, model, show == "named", tax)
 
     # The documented lot has an arbiter: the text the model never saw.
     for (lot_name, model, show), deltas in out.items():
         if lot_name != "documented":
             continue
-        for sig, d in deltas.items():
-            if sig in truth:
-                got = judge(SCORE.format(truth=truth[sig], candidate=d["intent"]))
-                scores[model, show, by_sig[sig]["category"]].append(int(got) if got.isdigit() else 0)
+        cases = {sig: f"Analyst: {truth[sig]}\n\nModel: {d['intent']}"
+                 for sig, d in deltas.items() if sig in truth}
+        print(f"  judging {model}/{show}: {len(cases)} cases", flush=True)
+        for sig, verdict in judge(SCORE, cases).items():
+            if verdict.isdigit():
+                scores[model, show, by_sig[sig]["category"]].append(int(verdict))
 
     # The hard lot has none, so the strongest model arbitrates cheap against
     # strong, blind to which is which.
     wins = defaultdict(lambda: [0, 0, 0])
     for show in ("named", "blind"):
         a, b = out["hard", CHEAP, show], out["hard", STRONG, show]
-        for sig in set(a) & set(b):
-            flip = random.Random(sig).random() < 0.5
-            x, y = (b, a) if flip else (a, b)
-            v = judge(PAIR.format(a=x[sig]["intent"], b=y[sig]["intent"]))
+        both = sorted(set(a) & set(b))
+        flipped = {sig: random.Random(sig).random() < 0.5 for sig in both}
+        cases = {}
+        for sig in both:
+            x, y = (b, a) if flipped[sig] else (a, b)
+            cases[sig] = f"A: {x[sig]['intent']}\n\nB: {y[sig]['intent']}"
+        print(f"  judging cheap against strong, {show}: {len(cases)} cases", flush=True)
+        for sig, v in judge(PAIR, cases).items():
             cat = by_sig[sig]["category"]
             if v in ("A", "B"):
-                cheap_won = (v == "A") != flip
-                wins[show, cat][0 if cheap_won else 1] += 1
+                wins[show, cat][0 if (v == "A") != flipped[sig] else 1] += 1
             else:
                 wins[show, cat][2] += 1
 
@@ -130,13 +209,7 @@ def main():
         print(f"  {show:6} {cat:44} {c}/{s}/{t}")
 
     # Routing: a category keeps the cheap model unless the strong one wins it.
-    routing = {"default": CHEAP}
-    for (show, cat), (c, s, t) in wins.items():
-        if show == "blind" and s > c:
-            routing[cat] = STRONG
-    for (model, show, cat), vals in scores.items():
-        if (model, show) == (CHEAP, "blind") and sum(vals) / len(vals) < 1.5:
-            routing[cat] = STRONG
+    routing = decide(scores, wins)
 
     Path("routing.yml").write_text(yaml.safe_dump({"routing": routing}, sort_keys=True))
     Path("calibration.json").write_text(json.dumps(

@@ -41,39 +41,70 @@ code, so it carries no tests — decided in the spec.
 
 ## Comments
 
-`calibrate.py` is written: both lots drawn reproducibly from a fixed seed (30
-documented, 20 hard plus 10 Burp `.pay` probes), each lot run in both conditions
-against both models, the documented lot scored against README text the model
-never saw, the hard lot judged cheap against strong blind and order-flipped,
-results reported per category and per condition and never averaged, six
-escalations printed for the operator, and the outcome written to `routing.yml`,
-which `qualify.py` prefers over `config.yml`.
+**Run.** Two lots of thirty, both conditions, both models, on the subscription.
+The outcome is in `routing.yml` and the evidence in `calibration.json`.
 
-The harness itself has not been run. What *has* been run, on the subscription, is
-a hand-sized version of its two lots with the cheap model, 26 live calls in all,
-and it has already paid for itself three times over:
+```
+routing:
+  Fuzzing: claude-sonnet-5-5
+  Payloads: claude-sonnet-5-5
+  default: claude-haiku-4-5-20251001
+```
 
-- **Contamination looks low.** Eight documented entries, named against blind:
-  blind recovered `html5sec` in `XSS-Jhaddix.txt`, the Tomcat manager, Spring
-  Boot actuators and Oracle from the sample alone. The named condition won
-  clearly twice out of eight (`Oracle-EBS`, where the filename carries "EBS").
-- **The hard lot did not break it,** against the spec's own expectation. Ten
-  blind entries from `Fuzzing/XSS`, `Fuzzing/LFI`, `Payloads`,
-  `Pattern-Matching` and the Burp `.pay` probes: ten answers, no rejections, all
-  specific. "Cheap model everywhere except the payload categories" is looking
-  like the wrong prediction.
-- **Two prompt failure modes caught, which would have reached all 1,362
-  entries.** Concrete examples in the prompt were copied verbatim — one entry
-  was handed the `accepted` example, another the `rejected` one — and entries
-  began referring to each other by batch position. The example is now about a
-  wordlist that does not exist, cross-references are rejected mechanically, and
-  so is any intent that reproduces the example.
+**The documented lot says the models are equivalent, and that neither is
+reciting.** Scored against README text neither model ever saw, out of 2:
 
-What this does not establish, and what the harness is still for: a scored
-comparison against the README arbiter, per category, with numbers. The residual
-risk is no longer vagueness but **confident embellishment** — a generic `raft-*`
-list was described as "refined toward WordPress, Joomla, and Drupal", which
-nothing in its sample supports. A mechanical gate cannot see that; only the
-scored lot can.
+| | named | blind | gap |
+|---|---|---|---|
+| haiku | 1.85 (n=26) | 1.86 (n=21) | −0.01 |
+| sonnet | 1.89 (n=28) | 1.79 (n=24) | +0.10 |
+
+Hiding the path and the filename costs nothing measurable. The contamination
+worry the lot was built for does not show up, and on these categories the cheap
+model is not behind the strong one.
+
+**The hard lot says the opposite, and it is the more sensitive instrument.**
+With no human text to score against, the strongest model compared cheap and
+strong head to head, order-flipped and blind: **the strong model won 19 of 19**
+blind comparisons, and 17 of 17 named. Not one tie, not one win for the cheap
+model, across `Fuzzing/XSS`, `Fuzzing/LFI`, `Pattern-Matching`, `Payloads/Images`,
+`Payloads/Zip-Traversal`, `Payloads/File-Names` and the Burp `.pay` probes.
+
+The two results are not in conflict. The documented lot is easy and the arbiter
+is coarse: both models sit at 1.8 of 2, so the instrument has hit its ceiling and
+cannot separate them. The head-to-head has no ceiling, and it separates them
+clearly on exactly the categories the spec expected to be hard. "Cheap model
+everywhere except the payload categories" was the right prediction.
+
+The escalations show what the gap is made of rather than that it exists. On
+`pcap-strings.txt` the cheap model blind says the terms were "harvested from
+real-world code exposure", which nothing supports, while the strong models both
+report the sentinel word `wombat` sitting at the end of the file. The failure is
+not vagueness, it is confident embellishment.
+
+**Per-category decisions are aggregated at the top-level category.** Twenty
+entries cannot support a decision about `Fuzzing/XSS/human-friendly` and
+`/robot-friendly` and `/Polyglots` separately; routing matches by prefix, so one
+line covers the family. `Pattern-Matching` lost both of its comparisons but
+n=2 — below the four-observation floor — so the rule refused to decide and left
+it on the cheap model. Moving it is one line in `routing.yml`.
+
+**Three defects in this harness, which had never been run.** The lot arithmetic
+broke whenever the lot was smaller than the Burp probe share. The judge was
+called once per entry, ~190 sequential calls to the strongest model, now once per
+lot for the same information. And the judge's reply parser was strict, so when
+the judge changed its formatting between calls the parse returned nothing *in
+silence* and deleted an entire condition from the measurement — the first run
+reported a 2.00-against-1.23 named/blind gap for the strong model that was pure
+parse artefact. It now reads loosely, falls back on order, and says so when it
+still comes up short. `--rejudge` and `--route-only` re-derive the verdicts and
+the decision from intents already paid for.
+
+**What the run also measured, unasked.** Six of twenty entries were refused by
+this project's own gates, and five of the six were our fault: a model answering
+`order: ["frequency"]` as a list of one, `laravel` and `symfony` missing from the
+vocabulary, and `common` banned as a bare word rejecting "the 500 most common
+passwords in the 2021 breach". Fixed; the same twenty now pass 20 of 20. Left
+unchecked that would have parked three or four hundred entries at `TODO`.
 
 No tests, by the decision in the spec.
