@@ -11,6 +11,13 @@ import catalog
 
 HEAD, TAIL, RES = 30, 10, 60
 
+# A comment, by the only convention the installed collections actually use. `#`
+# followed by space or nothing: `walk-the-line.txt` holds 13,107 passwords that
+# start with `#` and the Dutch lists hold hashtags, so a bare prefix is content.
+# `;`, `//` and `--` were looked for and are payloads here, not comments: they
+# appear as themselves in the SQLi and metacharacter lists.
+COMMENT = re.compile(rb"^#+(\s|$)")
+
 
 def shape_of(lines):
     def one(s):
@@ -36,8 +43,8 @@ def shape_of(lines):
 
 
 def scan_file(path):
-    """One pass: signature, lines, sample, order, case."""
-    h, n, prev, ordered, mixed = hashlib.md5(), 0, None, True, False
+    """One pass: signature, lines, requestable, sample, order, case."""
+    h, n, requestable, prev, ordered, mixed = hashlib.md5(), 0, 0, None, True, False
     head, tail, res = [], deque(maxlen=TAIL), []
     # Seeded, so the reservoir depends on the content alone: shape is committed
     # and shared, and a sample that differs per pass is not a measurement.
@@ -47,6 +54,8 @@ def scan_file(path):
             h.update(raw)
             line = raw.rstrip(b"\r\n")
             n += 1
+            if line.strip() and not COMMENT.match(line):
+                requestable += 1
             if len(head) < HEAD:
                 head.append(line)
             tail.append(line)
@@ -62,7 +71,8 @@ def scan_file(path):
     d = lambda bs: [b.decode("utf-8", "replace") for b in bs]
     sample = d(head) + d(res) + d(tail)
     return {
-        "sig": h.hexdigest(), "lines": n, "bytes": path.stat().st_size,
+        "sig": h.hexdigest(), "lines": n, "requestable": requestable,
+        "bytes": path.stat().st_size,
         "shape": shape_of(sample), "case": "mixed" if mixed else "lower",
         "order": "alphabetical" if ordered and n > 1 else "unknown",
         "sample": sample,
@@ -198,6 +208,11 @@ def selftest():
             "a tied vote goes to the shape seen first, the same way on every machine"
         p.write_bytes(b"")
         assert scan_file(p)["lines"] == 0, "empty file must not crash"
+        # cms-configuration-files.txt is 16 lines of which six are `# Drupal`:
+        # an agent budgeting on `lines` spends six requests on the word Drupal.
+        p.write_bytes(b"# Drupal\nsites/default/settings.php\n\n#1qaz\n## WordPress\nwp-config.php\n")
+        f = scan_file(p)
+        assert f["lines"] == 6 and f["requestable"] == 3, f
         # The sample is what shape is voted from, and shape is committed and
         # shared, so two scans of one file have to agree. An unseeded reservoir
         # made 17 entries flap between passes, churning the shared catalog.

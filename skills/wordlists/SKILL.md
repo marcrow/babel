@@ -21,7 +21,7 @@ evidence of what the file contains. Query the catalog.
  research corpus; a hit is a real directory on the server, not a guessable
  word.","target":["directory"],"tech":["generic"],"provenance":["curated"],
  "shape":["bare-word"],"language":["generic"],"order":"alphabetical",
- "case":"lower","lines":62284,"bytes":732119,"freshness":"2011",
+ "case":"lower","lines":62284,"requestable":62284,"bytes":732119,"freshness":"2011",
  "paths":["/usr/share/seclists/Discovery/Web-Content/raft-large-directories.txt"]}
 ```
 
@@ -42,6 +42,10 @@ wordlist. One grep lists every exception on the machine:
 rg '"kind"' $C | jq -r '[.kind,.name,.intent]|@tsv'
 ```
 
+`lines` is every line in the file; `requestable` is how many of them are a
+candidate — blank lines and `#` comments removed. They differ wherever a file
+carries either, and `requestable` is the one your budget is spent on.
+
 A grouped entry carries `files` instead of `lines`, and its `paths` point at a
 directory: `Fuzzing/User-Agents` is 4,499 files and one concept.
 
@@ -60,7 +64,7 @@ rg '"target":\[[^]]*"directory"' $C | rg '"tech":\[[^]]*"iis"'
 rg -i 'coldfusion|struts' $C
 
 # readable shortlist, smallest first
-rg -i 'subdomain' $C | jq -r '[.lines,.name,.intent]|@tsv' | sort -n | head -20
+rg -i 'subdomain' $C | jq -r '[.requestable,.name,.intent]|@tsv' | sort -n | head -20
 
 # the exact path, once chosen
 rg '"name":"raft-large-directories.txt"' $C | jq -r '.paths[0]'
@@ -82,8 +86,18 @@ rg '"name":"raft-large-directories.txt"' $C | jq -r '.paths[0]'
    `suspected-frequency` was inferred, not proven — treat it as a hint.
 5. **case** against the target: a `lower` list misses mixed-case paths on
    Linux, which matters less on IIS.
-6. **lines** against your request budget. Start small and escalate; a 9.5M-line
-   list is a decision, not a default.
+6. **requestable** against your request budget, not `lines`. Start small and
+   escalate; a 9.5M-line list is a decision, not a default. Where the two
+   differ the file carries comments, so **strip them before use** — `ffuf` will
+   ask the server for `# Drupal` otherwise:
+
+   ```sh
+   grep -avE '^#+([[:space:]]|$)' "$LIST" | grep -avE '^[[:space:]]*$' > words.txt
+   ```
+
+   That reproduces `requestable` exactly. `-a` is not optional: two lists carry
+   a stray non-text byte, and grep calls the whole file binary and drops lines
+   from your wordlist without saying so.
 7. **freshness** — a 2015 subdomain list cannot know a service invented after
    2015.
 
@@ -105,9 +119,9 @@ like `templates/abc/`, and appending `.asp` to that yields `templates/abc/.asp`;
 
 ```sh
 # the words: bare-word and nothing else
-rg '"shape":\["bare-word"\]' $C | rg '"target":\[[^]]*"directory"' | jq -r '[.lines,.name]|@tsv' | sort -n
+rg '"shape":\["bare-word"\]' $C | rg '"target":\[[^]]*"directory"' | jq -r '[.requestable,.name]|@tsv' | sort -n
 # the extensions
-rg '"shape":\["bare-extension"\]' $C | jq -r '[.lines,.name]|@tsv' | sort -n
+rg '"shape":\["bare-extension"\]' $C | jq -r '[.requestable,.name]|@tsv' | sort -n
 
 # then build, smallest viable pair first
 WORDS=$(rg '"name":"common_directories.txt"' $C | jq -r '.paths[0]')

@@ -5,7 +5,7 @@ A catalog describing every wordlist installed on this machine, so that an agent 
 Every entry carries **its own intent** — no two share a sentence. Writing sentences that are merely accurate is the failure this one is built to avoid.
 
 ```
-$ rg '"tech":\[[^]]*"magento"' local.jsonl | jq -r '[.lines,.name,.intent]|@tsv'
+$ rg '"tech":\[[^]]*"magento"' local.jsonl | jq -r '[.requestable,.name,.intent]|@tsv'
 16544  sitemap-magento.txt  The complete file tree of a Magento 1.x storefront extracted
                             from its sitemap, reaching into skin, media, lib, and app
                             directories; a hit identifies the shop software and major

@@ -23,6 +23,12 @@ that is not a wordlist at all: a web shell sits in `Web-Shells` and an agent
 searching that directory has to be told not to fuzz with it.
 _Avoid_: record, item, row
 
+**Requestable**:
+How many of an entry's lines a tool would actually ask the target for: its line
+count less the blank lines and the `#` comments. What a mission budgets on,
+where **lines** is the file's size rather than its cost.
+_Avoid_: usable, effective, net lines
+
 **Collection**:
 A set of wordlists with a common origin, installed and versioned as a unit:
 SecLists, the Burp payload lists, the lists shipped inside a tool. The directory
