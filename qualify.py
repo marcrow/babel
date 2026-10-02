@@ -53,6 +53,13 @@ them and do not contradict them.
 Axes, canonical values only; omit an axis the sample cannot support, except
 tech and language, where `generic` is the answer when nothing is specific:
 {vocab}
+- `word` is the lexicon of an entry whose own category puts it nowhere in
+  particular: a dictionary, surnames, the swear words. The category stated with
+  each entry settles this. Anything under `Discovery/` exists to discover, so it
+  enumerates directory, file or api-route even when its lines are one language's
+  vocabulary scraped off the web — name those, and add `word` beside them if you
+  like. target is what an agent would fuzz with these lines, and `word` alone
+  hides an entry from the first query the selection skill makes.
 - target names what the lines ARE, not what they contain. A file of names that
   happen to carry extensions enumerates files; only a file whose lines are the
   extensions themselves, `.php` or `.bak`, enumerates extension. An agent builds
