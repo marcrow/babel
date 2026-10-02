@@ -70,7 +70,10 @@ rg '"name":"raft-large-directories.txt"' $C | jq -r '.paths[0]'
 
 1. **target first.** It is the axis that eliminates most candidates. "HTTP
    fuzzing" is not a target; `parameter` and `directory` are different jobs.
-2. **tech**, when you know it. Prefer a `generic` list over a wrong-tech one.
+2. **tech**, when you know it. Prefer a `generic` list over a wrong-tech one, and
+   read a *missing* `tech` as generic: 259 entries name no technology because
+   none was there to name. So filter tech to rule out the wrong one rather than
+   to require the right one.
 3. **shape** — check it against your tool. A `bare-word` list used for file
    discovery needs extensions appended; a `rooted-path` list already carries
    its leading `/` and will double it under `ffuf`.

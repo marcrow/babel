@@ -25,12 +25,47 @@ tickets built, with the routing the calibration chose.
 
 ## Comments
 
-Blocked on 06 and on spend. The machinery is in place and the free pass has run:
-17 of 1,379 entries carry an intent harvested from documentation, 22 carry a
-documented year, and 1,362 still read `intent: "TODO"`. `catalogue.jsonl` is
-committed and carries no absolute path.
+**Run, by the operator, family by family on the subscription.** The catalog now
+holds **1,373 entries, every one of them qualified, and 1,373 distinct intents** —
+ronin-wordlists scores 0.019 on the same measure. 1,356 intents came from a
+model, 11 were written by hand, 6 were harvested from a README. The distinctness
+gate passed without the threshold being touched, `catalogue.jsonl` carries no
+absolute path, and nothing is left tagged for review.
 
-The rest is an operation for the operator: run `calibrate.py`, then `qualify.py`,
-then read a random sample and accept it. The last two boxes are judgements that
-cannot be self-certified, and the second of them — an agent picking a defensible
-wordlist for an unprompted target — is the only test that matters.
+Spot-checked against the files themselves rather than for plausibility, which is
+the check that matters: `actions.txt` is described as "224 verbs in both lowercase
+and title case merged together, unordered" and the file is exactly 224 lines of
+`accelerate`/`Accelerate` pairs; `hu.txt` as "Hungarian profanities with inflected
+forms" and it reads `balfasz`, `balfaszok`, `balfaszokat`; the OpenLDAP class list
+holds `account`, `alias`, `applicationEntity`. The numbers in the sentences are
+right too — 3,807 payloads for 3,807 lines, 854 variants for 854.
+
+**Four defects the analysis found, all in our own code or data.**
+
+1. **A rescan silently destroyed `kind` on 61 entries.** The scan carries a fixed
+   list of axes forward from the catalog and `kind` was never added to it, so a
+   walk erased work a model had been paid for, without a word. The list is now
+   `catalog.QUALIFIED`, named, in the shared module, and the self-check asserts
+   every model-written axis is in it.
+2. **An entry a model had looked at was re-sent on every pass.** A model-written
+   intent with no target, which is the honest answer for a generator script, did
+   not count as settled, so each pass paid for it again and re-tagged it. Now an
+   intent plus either a target, a kind, or a model's own signature settles it.
+3. **Ten web shells came back blank.** The model would not describe live backdoor
+   code — obfuscated PHP shells, a JSP one-liner, the Vtiger plugin — so those ten
+   are hand-written with `intent_from: hand`, which no model will overwrite. This
+   is the mechanism ADR 0001 exists for, used for the first time in earnest.
+4. **`word` reached 190 uses, 132 of them alone.** 69 are honest lexicons under
+   `Miscellaneous`; eight were flat errors, a surname list under `Usernames/`
+   whose target is `username`, and those are fixed. The rest, mostly the Dutch
+   corpora, are defensible as lexicons and remain reachable by `language` and by
+   free text, but `word` is the axis value to watch.
+
+**Known and accepted.** 250 entries name no technology, so the skill now says to
+read a missing `tech` as generic and to filter tech to rule one out rather than
+require one. Three entries carry neither target nor kind. Packaging files that
+are not wordlists at all — LICENCE, ReadMe.txt, Makefile, CREDITS, GPL — are now
+excluded by the scan rather than described.
+
+**The last box is the operator's and is not ticked by me.** `qualify.py --read 25`
+prints a random sample for exactly that.

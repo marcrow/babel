@@ -1,7 +1,9 @@
 # Copy to config.yml and adjust. config.yml is local and never committed.
 sources:
   - path: /usr/share/seclists
-    exclude: ["*.md", "README*", "LICENSE", ".git/*", "*.zip", "*.gz"]
+    # Packaging, not wordlists: the catalog describes what you would fuzz with.
+    exclude: ["*.md", "README*", "ReadMe*", "LICENSE", "LICENCE", "Licence",
+              "Makefile", "CREDITS", "GPL", ".git/*", "*.zip", "*.gz"]
     group: ["Fuzzing/User-Agents"]      # 4,499 files, one concept
 
   - path: /opt/my-resources/wordlist

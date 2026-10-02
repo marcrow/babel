@@ -16,6 +16,13 @@ LOCAL_ONLY = ("paths", "sample")
 # Intent provenances a model may not write over.
 PROTECTED = ("harvested", "hand")
 
+# What qualification establishes and the scan must carry forward untouched. The
+# scan owns shape and case, which it measures afresh every pass, and arbitrates
+# order, which is part observed and part judged. Anything here that the scan
+# forgets is silently destroyed on the next walk: `kind` was, for 61 entries.
+QUALIFIED = ("intent", "intent_from", "target", "tech", "provenance", "language",
+             "kind", "freshness")
+
 
 def read(path):
     """{signature: entry} from a JSONL file, empty if it is not there yet."""

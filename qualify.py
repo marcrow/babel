@@ -359,7 +359,13 @@ def qualify(samples, taxonomy, ask, docs=(), routing=None, batch=BATCH,
     # the axis an agent queries first.
     for e in samples:
         current = {**e, **deltas.get(e["sig"], {})}
-        if current.get("intent", "TODO") != "TODO" and current.get("target"):
+        done = current.get("intent", "TODO") != "TODO"
+        # Axes are worth asking for when a human wrote the intent and left none.
+        # When a model wrote it and named no target, it has already looked: asking
+        # again every pass costs tokens and tags the entry afresh each time.
+        settled = current.get("target") or current.get("kind") or \
+            current.get("intent_from") == "model"
+        if done and settled:
             skipped += 1
         else:
             todo.append(current)
@@ -789,11 +795,16 @@ def selftest():
     assert "intent" not in d["k1"] and "intent_from" not in d["k1"], d["k1"]
     assert d["k1"]["target"] == ["subdomain"], "axes are still worth asking for"
 
-    # an entry already carrying both an intent and its axes is not sent again
+    # an entry already carrying both an intent and its axes is not sent again,
+    # nor is one a model wrote and left without a target: it has already looked
     seen.clear()
     d, r = qualify([entry("k2", "e.txt", intent="Earlier, by a model.", intent_from="model",
-                          target=["file"])], tax, ask_with(GOOD))
-    assert d == {} and seen == [] and r["skipped"] == 1, r
+                          target=["file"]),
+                    entry("k3", "gen.sh", intent="A script, so nothing is enumerated.",
+                          intent_from="model"),
+                    entry("k4", "cmd.php", intent="A shell, written by hand.", intent_from="hand",
+                          kind="payload-file")], tax, ask_with(GOOD))
+    assert d == {} and seen == [] and r["skipped"] == 3, r
 
     # a handful of repeats costs the repeats, not the run: the second entry to be
     # handed a sentence loses it and is retried next pass

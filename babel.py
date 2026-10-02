@@ -116,8 +116,7 @@ def main():
             q = cat.get(sig, {})
             found[sig] = {**facts, "name": name, "collection": coll, "category": category,
                           "intent": q.get("intent", "TODO"),
-                          **{a: q[a] for a in ("intent_from", "target", "tech", "provenance",
-                                               "language", "freshness") if a in q},
+                          **{a: q[a] for a in catalog.QUALIFIED if a in q},
                           # shape and case are measurements, so the scan's own
                           # reading always wins; order is part observed and part
                           # judged, so a stored value survives unless this pass
@@ -171,6 +170,10 @@ def selftest():
         assert scan_file(p)["shape"] == ["name-with-extension"]
         p.write_bytes(b"")
         assert scan_file(p)["lines"] == 0, "empty file must not crash"
+    # Every axis qualification writes has to survive a rescan, or a walk quietly
+    # destroys work a model was paid for: `kind` did not, for 61 entries.
+    assert set(catalog.QUALIFIED) >= {"intent", "intent_from", "kind", "target", "tech",
+                                      "provenance", "language", "freshness"}
     print("selftest ok")
     qualify.selftest()
 
