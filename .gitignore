@@ -4,3 +4,4 @@ samples.jsonl
 __pycache__/
 calibration.json
 refused-run.jsonl
+.qualify.lock

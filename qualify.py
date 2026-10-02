@@ -6,7 +6,7 @@ vocabulary, batch splitting, the quality gates, README precedence and intent
 provenance all sit behind it. `ask` is injected by the caller, so the self-check
 exercises the whole spine without a network call.
 """
-import fnmatch, json, os, random, re, subprocess, sys, tempfile, time, unicodedata
+import atexit, fnmatch, json, os, random, re, subprocess, sys, tempfile, time, unicodedata
 import urllib.error, urllib.request
 from collections import Counter
 from pathlib import Path
@@ -534,6 +534,24 @@ def ask_api(prompt, model, tries=3):
 
 # --- the caller --------------------------------------------------------------
 
+LOCK = ".qualify.lock"
+
+
+def lock():
+    """One qualification at a time. Two passes each load the catalog and write it
+    whole, so the second to finish would erase the first's work -- including a
+    `--only Payloads` erasing a `--only Passwords` that finished a minute earlier."""
+    try:
+        fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        held = Path(LOCK).read_text().strip()
+        sys.exit(f"another pass is running (pid {held}); wait for it, or delete {LOCK} "
+                 "if it died. Running two at once loses the work of one.")
+    os.write(fd, str(os.getpid()).encode())
+    os.close(fd)
+    atexit.register(lambda: Path(LOCK).exists() and Path(LOCK).unlink())
+
+
 def ensure_axes(delta):
     return "  ".join(f"{a}={delta[a]}" for a in
                      ("kind", "target", "tech", "provenance", "language", "order", "freshness")
@@ -548,9 +566,16 @@ def main(argv):
         sys.exit("no local.jsonl: run babel.py first")
     pool = catalog.with_samples(entries, samples)
     q = cfg.get("qualify") or {}
-    # What the calibration decided, if it has run.
+    # Routing lives in routing.yml, written by the calibration and editable by
+    # hand. config.yml holds no routing, so there is one answer to "which model
+    # handles this category" rather than two files disagreeing.
+    routing = {"default": MODEL}
+    source = "the built-in default"
     if Path("routing.yml").exists():
-        q = {**q, **yaml.safe_load(Path("routing.yml").read_text())}
+        routing = (yaml.safe_load(Path("routing.yml").read_text()) or {}).get("routing") or routing
+        source = "routing.yml"
+    elif q.get("routing"):
+        routing, source = q["routing"], "config.yml"
 
     if (i := next((n for n, a in enumerate(argv) if a == "--read"), None)) is not None:
         # The operator's acceptance pass: no model, no writing, just the sentences.
@@ -617,9 +642,11 @@ def main(argv):
               + ("billed to ANTHROPIC_API_KEY" if metered else "on this machine's subscription"))
         return "--yes" in argv or input("proceed? [y/N] ").strip().lower() == "y"
 
+    lock()
+    print(f"routing, from {source}: " + ", ".join(f"{k}={v}" for k, v in sorted(routing.items())))
     deltas, report = qualify(
         pool, tax, None if "--harvest-only" in argv else ask, docs=docs,
-        routing=q.get("routing") or {"default": MODEL}, batch=q.get("batch", BATCH),
+        routing=routing, batch=q.get("batch", BATCH),
         confirm=confirm, log=lambda m: print(m, flush=True))
 
     # An entry whose harvested sentence was refused and which a model then wrote

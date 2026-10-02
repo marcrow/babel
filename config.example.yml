@@ -17,15 +17,10 @@ sources:
   - path: /usr/share/sqlmap/data/txt
     exclude: ["*.md"]
 
-# Qualification. `routing` is what the calibration decides: a category prefix to
-# the model that handles it. One model for everything until it says otherwise.
+# Qualification. The model routing is NOT here: it lives in routing.yml, which
+# the calibration writes and you may edit by hand. One file, one answer.
 qualify:
   batch: 10
   # Thinking is what separates a specific intent from an interchangeable one.
-  # 0 is fast and flat; 1024 keeps a batch at twenty seconds. Ignored with --api.
+  # 0 is fast and flat; 1024 keeps a batch of ten at twenty seconds.
   thinking: 1024
-  routing:
-    default: claude-haiku-4-5-20251001
-    # Payloads: claude-sonnet-5-5
-    # Fuzzing: claude-sonnet-5-5
-    # Pattern-Matching: claude-sonnet-5-5
