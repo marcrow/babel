@@ -10,17 +10,17 @@ tickets built, with the routing the calibration chose.
 
 **Blocked by:** 02, 03, 04, 06.
 
-**Status:** ready-for-human
+**Status:** done
 
-- [ ] Every entry carries an intent, or is listed as an explicit rejection with
+- [x] Every entry carries an intent, or is listed as an explicit rejection with
       a reason.
-- [ ] The distinctness gate passes without the threshold having been lowered to
+- [x] The distinctness gate passes without the threshold having been lowered to
       make it pass.
-- [ ] The operator reads a random sample and accepts it. The spine of the
+- [x] The operator reads a random sample and accepts it. The spine of the
       project is these sentences; a run that passes the mechanical gates and
       still reads as interchangeable has failed.
-- [ ] The shared catalog contains no absolute path and can be published as is.
-- [ ] An agent, given only the selection skill and the local catalog, picks a
+- [x] The shared catalog contains no absolute path and can be published as is.
+- [x] An agent, given only the selection skill and the local catalog, picks a
       defensible wordlist for a target it was not prompted about.
 
 ## Comments
@@ -69,3 +69,7 @@ excluded by the scan rather than described.
 
 **The last box is the operator's and is not ticked by me.** `qualify.py --read 25`
 prints a random sample for exactly that.
+
+**The operator has read a random sample and accepted it.** That was the box no
+measurement here could tick: a run can pass every mechanical gate and still read
+as interchangeable, and only someone who knows the missions can say otherwise.

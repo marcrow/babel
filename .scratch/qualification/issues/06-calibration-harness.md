@@ -26,18 +26,18 @@ code, so it carries no tests — decided in the spec.
 
 **Blocked by:** 02.
 
-**Status:** ready-for-human
+**Status:** done
 
-- [ ] Both lots are drawn reproducibly, and the hard lot is deliberately
+- [x] Both lots are drawn reproducibly, and the hard lot is deliberately
       weighted toward the categories where failure is expected.
-- [ ] Every model sees only what it would see in production; the arbiter's text
+- [x] Every model sees only what it would see in production; the arbiter's text
       is never shown to the model being measured.
-- [ ] Each lot is run in both conditions and the per-condition scores are
+- [x] Each lot is run in both conditions and the per-condition scores are
       reported separately, never averaged into one number.
-- [ ] Results are broken down per category, not per model only.
-- [ ] A small number of the hardest cases are escalated to the strongest model
+- [x] Results are broken down per category, not per model only.
+- [x] A small number of the hardest cases are escalated to the strongest model
       so the operator arbitrates thirty entries rather than thirteen hundred.
-- [ ] The outcome is written as the category-to-model routing that 02 consumes.
+- [x] The outcome is written as the category-to-model routing that 02 consumes.
 
 ## Comments
 
