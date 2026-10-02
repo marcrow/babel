@@ -51,6 +51,10 @@ them and do not contradict them.
 Axes, canonical values only; omit an axis the sample cannot support, except
 tech and language, where `generic` is the answer when nothing is specific:
 {vocab}
+- target names what the lines ARE, not what they contain. A file of names that
+  happen to carry extensions enumerates files; only a file whose lines are the
+  extensions themselves, `.php` or `.bak`, enumerates extension. An agent builds
+  a fuzzing list by pairing the two, so conflating them breaks the pairing.
 - kind: omit it. Nearly every entry is a wordlist, and a claim otherwise is
   checked against the sample and dropped if the sample does not bear it out, so
   name one only when the sample's first line opens a document or a program, or
@@ -379,22 +383,28 @@ def qualify(samples, taxonomy, ask, docs=(), routing=None, batch=BATCH,
             rejected += [(e["name"], f"model call failed: {exc}") for e in chunk]
             continue
         for i, e in enumerate(chunk, 1):
+            def refuse(why):
+                """Named in the report, and left on the entry so a grep finds it."""
+                rejected.append((e["name"], why))
+                deltas[e["sig"]] = {**deltas.get(e["sig"], {}), "review": why}
+
             if not (g := got.get(i)):
-                rejected.append((e["name"], "no answer from the model"))
+                refuse("no answer from the model")
                 continue
             # An intent the model did not write is not the model's to replace.
             writing = (e.get("intent", "TODO") == "TODO"
                        or e.get("intent_from") not in catalog.PROTECTED)
             intent = str(g.get("intent", "")).strip()
             if writing and (why := bad_intent(tax, intent)):
-                rejected.append((e["name"], why))
+                refuse(why)
                 continue
             axes, why, gaps = validate(tax, g, e)
             missing.update(gaps)
             if why:
-                rejected.append((e["name"], why))
+                refuse(why)
                 continue
-            delta = {**axes, **({"intent": intent, "intent_from": "model"} if writing else {})}
+            delta = {**axes, "review": None,      # whatever defeated it before is settled
+                     **({"intent": intent, "intent_from": "model"} if writing else {})}
             # What documentation stated outranks what the model inferred.
             deltas[e["sig"]] = {**delta, **deltas.get(e["sig"], {})}
 
@@ -509,6 +519,17 @@ def main(argv):
     if Path("routing.yml").exists():
         q = {**q, **yaml.safe_load(Path("routing.yml").read_text())}
 
+    if (i := next((n for n, a in enumerate(argv) if a == "--read"), None)) is not None:
+        # The operator's acceptance pass: no model, no writing, just the sentences.
+        done = [e for e in entries.values() if e["intent"] != "TODO"]
+        seed = int(argv[argv.index("--seed") + 1]) if "--seed" in argv else 0
+        chosen = random.Random(seed).sample(done, min(int(argv[i + 1]), len(done)))
+        for e in sorted(chosen, key=lambda e: (e.get("category", ""), e["name"])):
+            print(f"\n{e['name']}  [{e.get('category')}]  {e.get('lines', e.get('files'))} lines"
+                  f"  via {e.get('intent_from', '?')}\n  {e['intent']}\n  {ensure_axes(e)}")
+        print(f"\n{len(chosen)} of {len(done)} qualified entries, {len(entries) - len(done)} to go")
+        return
+
     if "--census" in argv:
         for axis in census(list(entries.values()), tax):
             print(f"\n{axis['axis']}  ({axis['missing']} entries carry no value)")
@@ -522,17 +543,25 @@ def main(argv):
     docs = harvest(s["path"] for s in cfg["sources"])
     if (i := next((n for n, a in enumerate(argv) if a == "--only"), None)) is not None:
         want = argv[i + 1]
-        pool = [e for e in pool if e["name"] == want or e["sig"].startswith(want)]
+        pool = [e for e in pool if e["name"] == want or e["sig"].startswith(want)
+                or e.get("category", "").startswith(want)]
         if not pool:
             sys.exit(f"no entry named {want} (its sample must be in samples.jsonl)")
         docs = ()          # requalifying is asking the model; the harvest had its turn
-        for e in pool:
-            if e.get("intent_from") == "hand" and "--force" not in argv:
-                sys.exit(f"{e['name']} was corrected by hand; --force to overwrite it")
-            e["intent"] = "TODO"
-            # --force is the entry surrendering its protection, so the merge lets
-            # the model's intent through.
-            entries[e["sig"]].pop("intent_from", None)
+        # Naming one entry means requalify it. Naming a category means work
+        # through what it still owes: re-sending what is already written would
+        # pay twice and overwrite intents that were fine.
+        if len(pool) == 1 or "--force" in argv:
+            for e in pool:
+                if e.get("intent_from") == "hand" and "--force" not in argv:
+                    sys.exit(f"{e['name']} was corrected by hand; --force to overwrite it")
+                e["intent"] = "TODO"
+                # --force is the entry surrendering its protection, so the merge
+                # lets the model's intent through.
+                entries[e["sig"]].pop("intent_from", None)
+        else:
+            print(f"{sum(e['intent'] == 'TODO' for e in pool)} of {len(pool)} still unqualified; "
+                  "--force to rewrite the rest")
 
     # A sample is a rehearsal: a fixed seed so it can be repeated after a fix, a
     # fresh seed so a fix can be validated on entries never seen before, and
@@ -635,12 +664,19 @@ def selftest():
 
     # the three fatal cases keep an entry at TODO, and name it
     d, r = qualify([entry("s2b", "b2.txt")], tax, ask_with({**GOOD, "target": ["cobol"]}))
-    assert d == {} and r["rejected"][0][1] == "no target" and r["gaps"]["target=cobol"] == 1
+    assert "intent" not in d["s2b"] and r["rejected"][0][1] == "no target"
+    assert d["s2b"]["review"] == "no target", "a refusal is left on the entry to be found later"
+    assert r["gaps"]["target=cobol"] == 1
 
     # banned filler vocabulary is rejected
     d, r = qualify([entry("s3", "c.txt")], tax, ask_with(
         {**GOOD, "intent": "A wordlist of common terms, used for fuzzing any web application."}))
-    assert d == {} and "filler" in r["rejected"][0][1], r
+    assert "intent" not in d["s3"] and "filler" in d["s3"]["review"], d
+
+    # and a later run that succeeds clears the tag rather than leaving it to rot
+    d2, _ = qualify([entry("s3", "c.txt")], tax, ask_with(GOOD))
+    assert d2["s3"]["review"] is None
+    assert "review" not in catalog.merge({"s3": {"sig": "s3", **d["s3"]}}, d2)["s3"]
 
     # the same sentence every time fails the run and writes nothing at all
     d, r = qualify([entry(f"q{i}", f"{i}.txt") for i in range(4)], tax,
@@ -803,7 +839,7 @@ def selftest():
 
     # a wordlist still owes a target
     d, r = qualify([entry("x2", "y.txt")], tax, ask_with({**GOOD, "target": []}))
-    assert d == {} and r["rejected"][0][1] == "no target", r
+    assert "intent" not in d["x2"] and r["rejected"][0][1] == "no target", r
 
     # the census counts what the vocabulary is actually carrying
     axes = {a["axis"]: a for a in census(

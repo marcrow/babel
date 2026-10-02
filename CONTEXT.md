@@ -118,9 +118,11 @@ The technology a wordlist is specific to, or `generic`.
 Where the words came from: curated, real-world, generated, leaked.
 
 **shape**:
-What an entry physically looks like: bare-word, rooted-path,
+What an entry physically looks like: bare-word, relative-path, rooted-path,
 name-with-extension, bare-extension, url. Decides whether a wordlist is usable
-as-is, and is the leading cause of misuse.
+as-is, and is the leading cause of misuse. Multi-valued, because `templates/abc/`
+is both a bare word and a path: only a shape of `bare-word` alone can have
+extensions appended to it, which is the pairing the axis exists for.
 
 **language**:
 The natural language of the words, or `generic`.

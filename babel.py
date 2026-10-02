@@ -20,7 +20,13 @@ def shape_of(lines):
             return "bare-extension"
         return "name-with-extension" if "." in s else "bare-word"
     seen = [one(s) for s in lines if s]
-    return max(set(seen), key=seen.count) if seen else "bare-word"
+    shape = [max(set(seen), key=seen.count)] if seen else ["bare-word"]
+    # `templates/abc/` is not a bare word: appending an extension to it produces
+    # nonsense, and that pairing is the whole reason the axis exists.
+    relative = [s for s in lines if s and "/" in s and not s.startswith("/") and "://" not in s]
+    if seen and len(relative) > len(seen) / 2 and "rooted-path" not in shape:
+        shape.append("relative-path")
+    return shape
 
 
 def scan_file(path):
@@ -48,7 +54,7 @@ def scan_file(path):
     sample = d(head) + d(res) + d(tail)
     return {
         "sig": h.hexdigest(), "lines": n, "bytes": path.stat().st_size,
-        "shape": [shape_of(sample)], "case": "mixed" if mixed else "lower",
+        "shape": shape_of(sample), "case": "mixed" if mixed else "lower",
         "order": "alphabetical" if ordered and n > 1 else "unknown",
         "sample": sample,
     }
@@ -69,7 +75,7 @@ def scan_group(d, members):
             sample += [l.rstrip(b"\r\n").decode("utf-8", "replace") for l in f.readlines()[:10]]
     return {
         "sig": h.hexdigest(), "files": len(members), "bytes": total,
-        "shape": [shape_of(sample)], "case": "mixed", "order": "unknown",
+        "shape": shape_of(sample), "case": "mixed", "order": "unknown",
         "sample": sample,
     }
 
@@ -112,7 +118,12 @@ def main():
                           "intent": q.get("intent", "TODO"),
                           **{a: q[a] for a in ("intent_from", "target", "tech", "provenance",
                                                "language", "freshness") if a in q},
-                          **{a: q[a] for a in ("shape", "order", "case") if a in q},
+                          # shape and case are measurements, so the scan's own
+                          # reading always wins; order is part observed and part
+                          # judged, so a stored value survives unless this pass
+                          # can prove alphabetical.
+                          **({"order": q["order"]} if "order" in q
+                             and facts.get("order") == "unknown" else {}),
                           "paths": paths}
 
     # Samples are for qualification only. Keeping them in local.jsonl would make
@@ -150,7 +161,12 @@ def selftest():
         p.write_bytes(b"a\nb\nc\n")
         assert scan_file(p)["order"] == "alphabetical"
         p.write_bytes(b"/etc/passwd\n/var/log\n")
-        assert scan_file(p)["shape"] == ["rooted-path"]
+        assert scan_file(p)["shape"] == ["rooted-path"], "a rooted path is not relative"
+        p.write_bytes(b"templates/abc/\ntemplates/beez/\n")
+        assert scan_file(p)["shape"] == ["bare-word", "relative-path"], \
+            "a path fragment must not read as a bare word to append extensions to"
+        p.write_bytes(b"admin\nbackup\n")
+        assert scan_file(p)["shape"] == ["bare-word"]
         p.write_bytes(b"index.php\nadmin.php\n")
         assert scan_file(p)["shape"] == ["name-with-extension"]
         p.write_bytes(b"")

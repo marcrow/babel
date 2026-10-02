@@ -55,6 +55,8 @@ def merge(entries, deltas):
         if delta.get("intent_from") == "model" and e.get("intent_from") in PROTECTED:
             delta = {k: v for k, v in delta.items() if k not in ("intent", "intent_from")}
         e.update(delta)
+        for k in [k for k, v in e.items() if v is None]:
+            del e[k]          # a delta of None clears a field, such as a settled review
     return out
 
 

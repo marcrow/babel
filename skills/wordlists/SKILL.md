@@ -91,8 +91,29 @@ yourself: the catalog records no relationship between wordlists.
 ## Combining
 
 The catalog states no combinations, because the axes imply them: a
-`shape: bare-word` list aimed at `target: file` needs an `target: extension`
-list alongside it. Derive the pairing, do not look it up.
+`shape: bare-word` list aimed at `target: file` needs an extension list beside
+it. Derive the pairing, do not look it up.
+
+**Pair on `shape`, not on `target` alone.** Append extensions only to a list
+whose shape is `bare-word` **alone**: `["bare-word","relative-path"]` means lines
+like `templates/abc/`, and appending `.asp` to that yields `templates/abc/.asp`;
+`name-with-extension` means they already carry one, and appending yields
+`admin.asp.asp`. The list of extensions you append is `shape: bare-extension`:
+
+```sh
+# the words: bare-word and nothing else
+rg '"shape":\["bare-word"\]' $C | rg '"target":\[[^]]*"directory"' | jq -r '[.lines,.name]|@tsv' | sort -n
+# the extensions
+rg '"shape":\["bare-extension"\]' $C | jq -r '[.lines,.name]|@tsv' | sort -n
+
+# then build, smallest viable pair first
+WORDS=$(rg '"name":"common_directories.txt"' $C | jq -r '.paths[0]')
+EXTS=$(rg '"name":"web-extensions.txt"' $C | jq -r '.paths[0]')
+while read -r w; do while read -r e; do echo "$w$e"; done < "$EXTS"; done < "$WORDS"
+```
+
+A `rooted-path` list already carries its leading `/` and must not be pasted onto
+a base URL that ends in one.
 
 ## Limits
 

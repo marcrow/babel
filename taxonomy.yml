@@ -24,7 +24,9 @@ axes:
          exchange, outlook, lotus, coldfusion-admin, processwire, kentico,
          sitefinity, umbraco, dotnetnuke, modx, concrete5, silverstripe,
          prestashop, dolibarr, liferay, cics, shopware, opencart, prestige,
-         c, cpp, csharp, rust, bash, powershell]
+         c, cpp, csharp, rust, bash, powershell, typescript, react, angular,
+         vue, sitecore, sharepoint-online, javascript, vbnet, sql, doctrine,
+         jquery, bootstrap, webpack, graphite, memcached]
 
   # What an entry physically is. Absent means `wordlist`, so one grep for
   # "kind" lists every installed file that is not one.
@@ -36,9 +38,11 @@ axes:
              norwegian, finnish, italian, portuguese, polish, russian,
              ukrainian, czech, slovak, hungarian, romanian, greek, turkish,
              arabic, hebrew, persian, hindi, chinese, japanese, korean, thai,
-             vietnamese, indonesian, catalan, latin]
+             vietnamese, indonesian, catalan, latin, croatian, lithuanian,
+             slovenian, serbian, bulgarian, estonian, latvian]
 
-  shape: [bare-word, rooted-path, name-with-extension, bare-extension, url]
+  shape: [bare-word, relative-path, rooted-path, name-with-extension,
+          bare-extension, url]
 
   order: [alphabetical, frequency, suspected-frequency, unknown]
 
