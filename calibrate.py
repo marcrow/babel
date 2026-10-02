@@ -140,7 +140,10 @@ def decide(scores, wins):
             top[0] += c
             top[1] += s
     for cat, (c, s) in family.items():
-        if c + s >= 4 and s >= c + 2:
+        # A proportional margin, not an absolute one: at twelve comparisons a
+        # seven-to-five split is a coin toss, and routing a hundred entries to a
+        # dearer model on a coin toss is how a measurement wastes money.
+        if c + s >= 4 and s >= 2 * c:
             routing[cat] = STRONG
     for (model, show, cat), vals in scores.items():
         if (model, show) == (CHEAP, "blind") and len(vals) >= 4 and sum(vals) / len(vals) < 1.5:

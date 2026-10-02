@@ -43,7 +43,9 @@ it names:
   on a Walloon target and nowhere else.
 
 Each entry stands alone: never refer to another entry in this batch, by number or
-otherwise, and never number your intent.
+otherwise, and never number your intent. Two entries must never receive the same
+sentence, however alike they look — one default-password file per router brand
+still differs by brand, by market and by what the brand ships enabled.
 
 The scan has already established the facts stated with each entry. Do not repeat
 them and do not contradict them.
@@ -363,7 +365,8 @@ def qualify(samples, taxonomy, ask, docs=(), routing=None, batch=BATCH,
     est = sum(len(p) for _, _, p in batches) // 4
     report = {"seen": len(samples), "skipped": skipped, "harvested": harvested,
               "from_model": 0, "rejected": rejected, "gaps": missing, "est_tokens": est,
-              "distinctness": 1.0, "interrupted": False, "declined": False, "ok": True}
+              "distinctness": 1.0, "interrupted": False, "declined": False, "ok": True,
+              "refused": {}}
 
     if ask is None or not batches:
         return gate(tax, samples, deltas, report)
@@ -414,15 +417,38 @@ def qualify(samples, taxonomy, ask, docs=(), routing=None, batch=BATCH,
 def gate(tax, samples, deltas, report):
     """The distinctness gate, measured over every intent the catalog would then
     carry rather than over this run alone: resumability turns one pass into many
-    small runs, and repetition across them has to be caught just the same."""
-    intents = [i for e in samples
-               for i in [{**e, **deltas.get(e["sig"], {})}.get("intent", "TODO")] if i != "TODO"]
+    small runs, and repetition across them has to be caught just the same.
+
+    A handful of repeats in a homogeneous family — 168 router password files read
+    much alike — is refused entry by entry, so the repeat is retried on the next
+    pass instead of costing the whole run. A run that repeats itself wholesale is
+    still refused wholesale: that is the failure this project exists to avoid,
+    and it should be loud.
+    """
+    intents, first, dupes = [], {}, []
+    for e in samples:
+        written = deltas.get(e["sig"], {})
+        intent = written.get("intent", e.get("intent", "TODO"))
+        if intent == "TODO":
+            continue
+        intents.append(intent)
+        if intent in first:
+            if "intent" in written:            # this run wrote the repeat
+                dupes.append((e["sig"], e["name"], first[intent]))
+        else:
+            first[intent] = e["name"]
+
     report["from_model"] = sum(d.get("intent_from") == "model" for d in deltas.values())
     if intents:
         report["distinctness"] = round(len(set(intents)) / len(intents), 3)
         if report["distinctness"] < tax.get("distinctness", 0.95):
             report["ok"] = False
-            return {}, report          # a bad run cannot become the catalog
+            report["refused"] = deltas          # spent, kept aside, not written
+            return {}, report                   # a bad run cannot become the catalog
+    for sig, name, taken in dupes:
+        why = f"the same sentence as {taken}"
+        report["rejected"].append((name, why))
+        deltas[sig] = {"review": why}           # no intent, so the next pass retries it
     return deltas, report
 
 
@@ -618,7 +644,12 @@ def main(argv):
     if report["declined"]:
         sys.exit("declined, nothing written")
     if not report["ok"]:
-        sys.exit("intents too repetitive to be useful: nothing written")
+        # Nothing reaches the catalog, but the tokens were already spent: the
+        # intents are kept aside so the next attempt can read them rather than
+        # pay for them again.
+        catalog.write("refused-run.jsonl", [{"sig": sig, **d} for sig, d in report["refused"].items()])
+        sys.exit(f"intents too repetitive to be useful ({report['distinctness']}): nothing written "
+                 "to the catalog, the run is in refused-run.jsonl")
     catalog.write_both(entries, deltas)
     print(f"wrote {len(deltas)} entries to {catalog.CATALOG} and {catalog.LOCAL}"
           + (" (interrupted: rerun to finish)" if report["interrupted"] else ""))
@@ -682,6 +713,7 @@ def selftest():
     d, r = qualify([entry(f"q{i}", f"{i}.txt") for i in range(4)], tax,
                    ask_with(*[dict(GOOD)] * 4))
     assert d == {} and not r["ok"] and r["distinctness"] == 0.25, r
+    assert len(r["refused"]) == 4, "the tokens were spent, so the run is kept aside to read"
 
     # a harvested intent is kept, and a model is not allowed to replace it
     docs = [{"collection": "seclists", "category": "Discovery/DNS", "pattern": "sub*",
@@ -725,6 +757,18 @@ def selftest():
     d, r = qualify([entry("k2", "e.txt", intent="Earlier, by a model.", intent_from="model",
                           target=["file"])], tax, ask_with(GOOD))
     assert d == {} and seen == [] and r["skipped"] == 1, r
+
+    # a handful of repeats costs the repeats, not the run: the second entry to be
+    # handed a sentence loses it and is retried next pass
+    same = {**GOOD, "target": ["password"]}
+    d, r = qualify([entry("d1", "3bb.txt"), entry("d2", "4bb.txt"),
+                    *[entry(f"d{i}", f"{i}.txt") for i in range(3, 26)]], tax,
+                   ask_with(same, same, *[{**GOOD, "intent": f"Distinct sentence number {i}, "
+                                          "long enough to clear the floor."} for i in range(23)]),
+                   batch=30)      # one batch, so the fake's numbering lines up
+    assert d["d1"]["intent"] and "intent" not in d["d2"], "the repeat loses the sentence"
+    assert d["d2"]["review"] == "the same sentence as 3bb.txt", d["d2"]
+    assert r["ok"], "a couple of repeats must not cost a run of twenty-five"
 
     # the gate measures the catalog, not the run: a model repeating an intent the
     # catalog already carries fails just as surely
