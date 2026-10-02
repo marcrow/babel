@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Scan wordlist sources and rebuild local.jsonl. Observes only; calls no model."""
+"""Scan wordlist sources and rebuild local.jsonl, or --export the shared
+catalog for another machine. Observes only; calls no model."""
 import fnmatch, hashlib, json, random, re, sys
-from collections import deque
+from collections import Counter, deque
 from pathlib import Path
 
 import yaml
@@ -9,6 +10,7 @@ import yaml
 import catalog
 
 HEAD, TAIL, RES = 30, 10, 60
+
 
 def shape_of(lines):
     def one(s):
@@ -20,7 +22,11 @@ def shape_of(lines):
             return "bare-extension"
         return "name-with-extension" if "." in s else "bare-word"
     seen = [one(s) for s in lines if s]
-    shape = [max(set(seen), key=seen.count)] if seen else ["bare-word"]
+    # Counter, not max(set(...)): a set of strings iterates in an order that is
+    # randomised per process, so a tied vote -- 6 bare words against 6 names
+    # with extensions, in URI-XSS.fuzzdb.txt -- landed differently on every
+    # scan. Ties now go to the shape seen first, which the sample fixes.
+    shape = [Counter(seen).most_common(1)[0][0]] if seen else ["bare-word"]
     # `templates/abc/` is not a bare word: appending an extension to it produces
     # nonsense, and that pairing is the whole reason the axis exists.
     relative = [s for s in lines if s and "/" in s and not s.startswith("/") and "://" not in s]
@@ -33,6 +39,9 @@ def scan_file(path):
     """One pass: signature, lines, sample, order, case."""
     h, n, prev, ordered, mixed = hashlib.md5(), 0, None, True, False
     head, tail, res = [], deque(maxlen=TAIL), []
+    # Seeded, so the reservoir depends on the content alone: shape is committed
+    # and shared, and a sample that differs per pass is not a measurement.
+    rng = random.Random(0)
     with open(path, "rb") as f:
         for raw in f:
             h.update(raw)
@@ -43,7 +52,7 @@ def scan_file(path):
             tail.append(line)
             if len(res) < RES:
                 res.append(line)
-            elif (j := random.randrange(n)) < RES:
+            elif (j := rng.randrange(n)) < RES:
                 res[j] = line
             if ordered and prev is not None and line < prev:
                 ordered = False
@@ -114,7 +123,12 @@ def main():
                 found[sig]["paths"] += paths
                 continue
             q = cat.get(sig, {})
-            found[sig] = {**facts, "name": name, "collection": coll, "category": category,
+            # The directory we mount a collection at is a machine property, so a
+            # local rename must not rewrite the committed collection. Category
+            # stays measured: it is upstream's structure, and it moves when
+            # upstream moves a list.
+            found[sig] = {**facts, "name": name, "category": category,
+                          "collection": q.get("collection", coll),
                           "intent": q.get("intent", "TODO"),
                           **{a: q[a] for a in catalog.QUALIFIED if a in q},
                           # shape and case are measurements, so the scan's own
@@ -146,10 +160,21 @@ def main():
             print(f"  - {g['name']} ({g['sig'][:8]})")
 
 
+def export():
+    """Fold this machine's entries back into the shared catalog, by signature.
+
+    A merge and never a replacement: an entry the catalog describes but this
+    disk happens to lack stays described, because one machine is not the census.
+    """
+    merged = catalog.merge(catalog.read(catalog.CATALOG), catalog.read(catalog.LOCAL))
+    catalog.write(catalog.CATALOG, [catalog.shared(e) for e in merged.values()])
+    print(f"{len(merged)} entries in {catalog.CATALOG}")
+
+
 def selftest():
     import tempfile
 
-    import qualify
+    import portability, qualify
     with tempfile.TemporaryDirectory() as t:
         p = Path(t) / "w.txt"
         p.write_bytes(b"admin\nBackup\nzebra\n")
@@ -168,15 +193,30 @@ def selftest():
         assert scan_file(p)["shape"] == ["bare-word"]
         p.write_bytes(b"index.php\nadmin.php\n")
         assert scan_file(p)["shape"] == ["name-with-extension"]
+        p.write_bytes(b"wp-admin\nwp-login.php\n")
+        assert scan_file(p)["shape"] == ["bare-word"], \
+            "a tied vote goes to the shape seen first, the same way on every machine"
         p.write_bytes(b"")
         assert scan_file(p)["lines"] == 0, "empty file must not crash"
+        # The sample is what shape is voted from, and shape is committed and
+        # shared, so two scans of one file have to agree. An unseeded reservoir
+        # made 17 entries flap between passes, churning the shared catalog.
+        p.write_bytes(b"".join(b"w%d\nf%d.txt\n" % (i, i) for i in range(500)))
+        assert scan_file(p)["sample"] == scan_file(p)["sample"], \
+            "the sample must be reproducible, or shape is not a measurement"
     # Every axis qualification writes has to survive a rescan, or a walk quietly
     # destroys work a model was paid for: `kind` did not, for 61 entries.
     assert set(catalog.QUALIFIED) >= {"intent", "intent_from", "kind", "target", "tech",
                                       "provenance", "language", "freshness"}
     print("selftest ok")
     qualify.selftest()
+    portability.selftest()
 
 
 if __name__ == "__main__":
-    selftest() if "--selftest" in sys.argv else main()
+    if "--selftest" in sys.argv:
+        selftest()
+    elif "--export" in sys.argv:
+        export()
+    else:
+        main()

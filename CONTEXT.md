@@ -25,7 +25,10 @@ _Avoid_: record, item, row
 
 **Collection**:
 A set of wordlists with a common origin, installed and versioned as a unit:
-SecLists, the Burp payload lists, the lists shipped inside a tool.
+SecLists, the Burp payload lists, the lists shipped inside a tool. The directory
+it is mounted at is a property of the machine, so renaming that directory does
+not rename the collection: an entry whose signature the catalog already knows
+keeps the committed name.
 _Avoid_: pack, repo, bundle
 
 **Mission**:
@@ -87,6 +90,13 @@ _Avoid_: origin, author, source
 Bringing a newly installed wordlist into the catalog. Installing and cataloging
 are separate acts.
 _Avoid_: import, registration
+
+**Export**:
+Folding this machine's entries back into the shared catalog, by signature, so
+that another machine inherits them. A merge and never a replacement: an entry
+the catalog describes but this disk does not hold stays described, because one
+machine's disk is not the census. The scan never exports on its own.
+_Avoid_: sync, push, upload
 
 ### Axes
 

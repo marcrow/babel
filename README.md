@@ -2,7 +2,7 @@
 
 A catalog describing every wordlist installed on this machine, so that an agent on a mission can tell what each one is for and choose between them.
 
-It currently describes **1,373 entries, each with its own intent** — no two share a sentence. The public project with the closest schema, `ronin-wordlists`, carries 43 distinct summaries across 2,285 entries; writing sentences that are merely accurate is the failure this one is built to avoid.
+Every entry carries **its own intent** — no two share a sentence. Writing sentences that are merely accurate is the failure this one is built to avoid.
 
 ```
 $ rg '"tech":\[[^]]*"magento"' local.jsonl | jq -r '[.lines,.name,.intent]|@tsv'
@@ -30,8 +30,6 @@ It is a file, queried with `rg` and `jq`. There is no server, no daemon and no M
 | `routing.yml` | which model qualifies which category, written by the calibration |
 | `config.yml` | your sources and their exclusions. Local; copy `config.example.yml` |
 
-Only `catalogue.jsonl` is the catalog. The other two JSONL files are derived and gitignored.
-
 ## On a new machine
 
 ```sh
@@ -40,6 +38,14 @@ python3 babel.py                     # ~60s over 2.2 GB: hashes, samples, measur
 ```
 
 The scan rebuilds `local.jsonl` from the committed catalog **by content signature**, so a new machine inherits every intent for nothing, even where the paths differ. That is the whole point of [ADR 0002](docs/adr/0002-content-signature-identity.md). Nothing calls a model at this stage.
+
+## Handing the catalog on
+
+```sh
+python3 babel.py --export            # fold this machine's entries into catalogue.jsonl
+```
+
+A scan only ever reads the committed catalog; the export is what writes back to it, merging this machine's entries in by signature. It is a merge and never a replacement: an entry the catalog describes but this disk does not hold stays described, so a machine holding half of SecLists cannot shrink the catalog to its own half. Paths and samples are stripped on the way out, which is what leaves the result publishable as is.
 
 ## Qualifying what is not yet described
 
@@ -53,11 +59,11 @@ python3 qualify.py --census               # what each axis actually carries
 
 Runs on this machine's Claude Code subscription by default, `--api` for a metered key. The estimated token cost is printed before the first call and the run can be declined there. Progress is reported per batch; an interrupted run keeps the batches it has paid for; rerunning sends only what is still `TODO`. One pass at a time — a second refuses to start, because both would write the catalog whole.
 
-Two gates stand between a model and the catalog. An intent repeated by a second entry is refused and retried, and a run that repeats itself wholesale is refused entirely, writing nothing but keeping its work in `refused-run.jsonl`. Filler vocabulary is rejected, and a value outside `taxonomy.yml` is never recorded — though it no longer costs the sentence, only itself, and is reported as one line to add.
+Two gates stand between a model and the catalog. A repeated intent is refused and retried, and a run that repeats itself wholesale writes nothing at all. Filler vocabulary and values outside `taxonomy.yml` are rejected too; the [spec](.scratch/qualification/spec.md) has the exact rules.
 
 ## Correcting an intent
 
-Edit the line in `catalogue.jsonl`, set `"intent_from":"hand"`, and run `python3 babel.py`. No model will ever overwrite it. Corrections are the point, not an exception: 11 of the current intents are hand-written, because the model declines to describe live web-shell code.
+Edit the line in `catalogue.jsonl`, set `"intent_from":"hand"`, and run `python3 babel.py`. No model will ever overwrite it. Corrections are the point, not an exception: some intents are hand-written, because the model declines to describe live web-shell code.
 
 ## Choosing which model to trust
 
@@ -71,14 +77,14 @@ Two lots of thirty, each run with the filename shown and hidden, scored against 
 ## Checks
 
 ```sh
-python3 babel.py --selftest          # both self-checks, 0.12s, no network call
+python3 babel.py --selftest          # three self-checks, 0.9s, no network call
 ```
 
-Plain `assert`, no framework, a faked model. The qualification seam is the only thing tested, and no test calls a model.
+Plain `assert`, no framework, a faked model. The third runs the scan end to end in a temporary directory, against a catalog it writes itself, to hold the claim ADR 0002 makes: a source can move, a root can be renamed, and the catalog can cross to a machine it has never seen without an intent being lost or a path leaking into what gets committed.
 
 ## Reading further
 
 - **[`skills/wordlists/SKILL.md`](skills/wordlists/SKILL.md)** — how an agent picks a wordlist from the catalog. The audience this project exists for.
 - **[`CONTEXT.md`](CONTEXT.md)** — the project's language. Nine axes, and the terms this codebase refuses.
 - **[`docs/adr/`](docs/adr/)** — the two decisions that shape everything else.
-- **[`.scratch/qualification/`](.scratch/qualification/)** — the spec, and the nine tickets. Seven are done; `08` and `09` are open, both found by an agent using the catalog in earnest.
+- **[`.scratch/qualification/`](.scratch/qualification/)** — the spec, and the tickets, each carrying its own status.
