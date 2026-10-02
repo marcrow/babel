@@ -16,6 +16,10 @@ axes:
          sap, iot, scada, prometheus, keycloak, kafka, rabbitmq, zookeeper,
          consul, solr, nagios, zabbix, splunk, phpmyadmin, webmin, cpanel]
 
+  # What an entry physically is. Absent means `wordlist`, so one grep for
+  # "kind" lists every installed file that is not one.
+  kind: [wordlist, payload-file, source-code, structured-data, binary]
+
   provenance: [curated, real-world, generated, leaked]
 
   language: [generic, english, spanish, french, german, dutch, danish, swedish,
@@ -127,6 +131,19 @@ aliases:
   zh: chinese
   ja: japanese
   multilingual: generic
+
+  webshell: payload-file
+  web-shell: payload-file
+  shell: payload-file
+  backdoor: payload-file
+  upload: payload-file
+  exploit: source-code
+  generator: source-code
+  code: source-code
+  program: source-code
+  compressed: binary
+  non-text: binary
+  unreadable: binary
 
   freq: frequency
   frequency-ordered: frequency

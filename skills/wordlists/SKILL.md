@@ -33,6 +33,15 @@ documentation, `model` from a qualification run, `hand` from the operator. Trust
 them in that order when two entries disagree; the axes come from a model either
 way.
 
+An entry carrying `kind` is **not a wordlist**: `payload-file` is delivered or
+uploaded whole, `source-code` is compiled or run, `structured-data` must be
+parsed first, `binary` is compressed or not text. No `kind` means it is a
+wordlist. One grep lists every exception on the machine:
+
+```sh
+rg '"kind"' $C | jq -r '[.kind,.name,.intent]|@tsv'
+```
+
 A grouped entry carries `files` instead of `lines`, and its `paths` point at a
 directory: `Fuzzing/User-Agents` is 4,499 files and one concept.
 

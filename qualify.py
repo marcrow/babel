@@ -50,6 +50,17 @@ them and do not contradict them.
 Axes, canonical values only; omit an axis the sample cannot support, except
 tech and language, where `generic` is the answer when nothing is specific:
 {vocab}
+- kind: omit it when the sample is a wordlist, which is what nearly all of them
+  are. Name it when the sample is plainly something else that happens to be
+  installed among them: `payload-file` for something delivered or uploaded whole,
+  a web shell or a crafted image; `source-code` for something compiled or run,
+  an exploit or a script that generates a list; `structured-data` when the whole file is
+  one document to parse, an XML tree or a JSON object — never because the lines
+  of a list happen to contain HTML or XML fragments, which is still a wordlist;
+  `binary` for anything compressed or not text at all. Say in the intent what it is and how it is used, and leave target
+  out when nothing is being enumerated. Do not guess from an extension: a `.php`
+  file holding one path per line is a wordlist, and a `.txt` file holding a shell
+  script is not.
 - freshness: a four-digit year the contents imply, else omit
 - order: only `frequency` or `suspected-frequency`, and only from head and tail
 
@@ -85,9 +96,16 @@ def validate(tax, got, entry):
                 bad.append(f"{axis}={v}")
     if bad:
         return None, "unknown axis value: " + ", ".join(bad)
-    if not axes.get("target"):
+    kind = canonical(tax, "kind", got.get("kind") or "wordlist")
+    if not kind:
+        return None, f"unknown axis value: kind={got.get('kind')}"
+    if not axes.get("target") and kind == "wordlist":
         return None, "no target"
+    if not supported(kind, entry):
+        return None, f"claims {kind} but the scan's sample does not support it"
     axes = {a: sorted(set(v)) for a, v in axes.items()}
+    if kind != "wordlist":
+        axes["kind"] = kind        # absence means wordlist, so only oddities carry it
     if (o := got.get("order")) and entry.get("order", "unknown") == "unknown":
         c = canonical(tax, "order", o)
         if not c:
@@ -101,6 +119,27 @@ def validate(tax, got, entry):
 
 EXAMPLE = ("belgian town names", "branch-office hostname", "walloon target",
            "dutch and french spellings")
+
+
+# A file of code or markup announces itself on its first line. A list of payloads
+# does not, however much markup each of its lines contains.
+CODEY = re.compile(r"""\s*(\#!|<\?|<%|<!--|<html|\#include|//|/\*|import |package |using |
+                          function |class |def |\$\w+\s*=)""", re.I | re.X)
+DOCUMENT = re.compile(r"\s*(<\?xml|<!DOCTYPE|<html|[{\[])", re.I)
+
+
+def supported(kind, entry):
+    """Whether the scan's own sample backs a claim that an entry is not a wordlist.
+    Mis-tagging a usable list hides it from every query, which is worse than
+    leaving it TODO, so a claim the sample cannot support is refused."""
+    head = (entry.get("sample") or [""])[0]
+    if kind == "structured-data":
+        return bool(DOCUMENT.match(head))
+    if kind in ("payload-file", "source-code"):
+        return bool(CODEY.match(head)) or (entry.get("lines") or 0) <= 3
+    if kind == "binary":
+        return any("\ufffd" in line for line in entry.get("sample") or [])
+    return True
 
 
 def bad_intent(tax, intent):
@@ -599,7 +638,8 @@ def selftest():
     seen.clear()
     qualify([entry("p1", "pi-large.txt", sample=["3." + "1415926535" * 500])], tax,
             ask_with(GOOD))
-    assert "…clipped" in seen[0] and len(seen[0]) < 4000, len(seen[0])
+    header = len(prompt_for(tax, [], True))      # measure the entry, not the instructions
+    assert "…clipped" in seen[0] and len(seen[0]) - header < 1000, len(seen[0]) - header
 
     # the blind condition shows the model nothing but the sample and the facts
     seen.clear()
@@ -646,6 +686,35 @@ def selftest():
                           {"sig": "u2", "sample": ["ok"]}])
         back = catalog.read(f)
     assert set(back) == {"u1", "u2"} and back["u1"]["sample"] == ["a\u2028b", "c\x85d"]
+
+    # a list of payloads is a wordlist, whatever its lines look like
+    d, r = qualify([entry("x6", "XSS-Jhaddix.txt", lines=110,
+                          sample=["'\"--></style></script><script>alert(1)</script>"])],
+                   tax, ask_with({**GOOD, "target": ["injection-payload"], "kind": "payload-file"}))
+    assert d == {} and "payload-file" in r["rejected"][0][1], r
+
+    # an entry that is not a wordlist at all is kept, marked, and needs no target
+    shell = {"n": 1, "kind": "WebShell", "tech": ["php"],
+             "intent": "A single-file PHP backdoor that shells out through $_GET; it is uploaded "
+                       "to a target, never fuzzed with."}
+    d, r = qualify([entry("x1", "cmd.php", sample=["<?php system($_GET['cmd']); ?>"])],
+                   tax, ask_with(shell))
+    assert d["x1"]["kind"] == "payload-file" and "target" not in d["x1"], d["x1"]
+    assert not r["rejected"], r["rejected"]
+
+    # a claim of structured-data has to be supported by the sample the scan took
+    d, r = qualify([entry("x4", "payloads.txt", sample=["<img src=x onerror=alert(1)>"])],
+                   tax, ask_with({**GOOD, "kind": "structured-data"}))
+    assert d == {} and "does not support it" in r["rejected"][0][1], r
+    d, r = qualify([entry("x5", "vectors.xml", sample=['<?xml version="1.0"?>', "<xss/>"])],
+                   tax, ask_with({**GOOD, "kind": "structured-data"}))
+    assert d["x5"]["kind"] == "structured-data", d
+
+    # a wordlist still owes a target, and an unknown kind is rejected like any value
+    d, r = qualify([entry("x2", "y.txt")], tax, ask_with({**GOOD, "target": []}))
+    assert d == {} and r["rejected"][0][1] == "no target", r
+    d, r = qualify([entry("x3", "z.txt")], tax, ask_with({**GOOD, "kind": "spreadsheet"}))
+    assert d == {} and "kind=spreadsheet" in r["rejected"][0][1], r
 
     # the census counts what the vocabulary is actually carrying
     axes = {a["axis"]: a for a in census(

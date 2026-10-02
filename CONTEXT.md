@@ -18,7 +18,9 @@ _Avoid_: index, database, registry
 
 **Entry**:
 The unit of the catalog. Describes either a single wordlist or a group of
-wordlists treated as one concept.
+wordlists treated as one concept — or, marked by its **kind**, an installed file
+that is not a wordlist at all: a web shell sits in `Web-Shells` and an agent
+searching that directory has to be told not to fuzz with it.
 _Avoid_: record, item, row
 
 **Collection**:
@@ -88,10 +90,18 @@ _Avoid_: import, registration
 
 ### Axes
 
-The eight dimensions along which an entry is classified. Seven are drawn from a
+The nine dimensions along which an entry is classified. Eight are drawn from a
 controlled vocabulary; **freshness** is an open axis, being a year rather than a
-choice. Multi-valued except **order**, **case** and **freshness**. Three of the
-eight are established by the scan without a model.
+choice. Multi-valued except **kind**, **order**, **case** and **freshness**.
+Three of the nine are established by the scan without a model.
+
+**kind**:
+What an entry physically is: `wordlist`, or one of the things installed among
+the wordlists that is not one — `payload-file` delivered whole, `source-code` to
+compile or run, `structured-data` to parse first, `binary`. Absence means
+`wordlist`, so one grep for `kind` lists every exception. A claim that an entry
+is not a wordlist must be supported by the sample the scan took, because
+mis-tagging a usable list hides it from every query.
 
 **target**:
 What the wordlist enumerates: directory, file, extension, parameter, api-route,

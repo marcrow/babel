@@ -1,5 +1,9 @@
 {
   "enabledPlugins": {
     "ponytail@ponytail": true
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"/root/.claude/plugins/cache/ponytail/ponytail/4.10.0/hooks/ponytail-statusline.sh\""
   }
 }
