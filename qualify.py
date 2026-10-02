@@ -651,7 +651,10 @@ def main(argv):
 
     # An entry whose harvested sentence was refused and which a model then wrote
     # is not a loss, so coverage is counted over entries, never over refusals.
-    carried = {sig for sig, d in deltas.items() if "intent" in d}
+    # Everything that now carries an intent, not only what this pass wrote: a
+    # family that was already half done must not read as half failed.
+    carried = {e["sig"] for e in pool if "intent" in deltas.get(e["sig"], {})
+               or e.get("intent", "TODO") != "TODO"}
     left = [e["name"] for e in pool if e["sig"] not in carried
             and e.get("intent", "TODO") == "TODO"]
     print(f"\n{report['harvested']} harvested, {report['from_model']} from a model, "

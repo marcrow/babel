@@ -22,6 +22,7 @@ axes:
          sap, iot, scada, prometheus, keycloak, kafka, rabbitmq, zookeeper,
          consul, solr, nagios, zabbix, splunk, phpmyadmin, webmin, cpanel,
          exchange, outlook, lotus, coldfusion-admin, processwire, kentico,
+         phpbb, avaya, telnet, vnc, rdp, mqtt, modbus,
          sitefinity, umbraco, dotnetnuke, modx, concrete5, silverstripe,
          prestashop, dolibarr, liferay, cics, shopware, opencart, prestige,
          c, cpp, csharp, rust, bash, powershell, typescript, react, angular,
@@ -39,7 +40,8 @@ axes:
              ukrainian, czech, slovak, hungarian, romanian, greek, turkish,
              arabic, hebrew, persian, hindi, chinese, japanese, korean, thai,
              vietnamese, indonesian, catalan, latin, croatian, lithuanian,
-             slovenian, serbian, bulgarian, estonian, latvian]
+             slovenian, serbian, bulgarian, estonian, latvian, icelandic, urdu,
+             bengali, tagalog, malay, afrikaans]
 
   shape: [bare-word, relative-path, rooted-path, name-with-extension,
           bare-extension, url]
@@ -200,10 +202,13 @@ aliases:
 # "wordlist" is banned where it is tautological -- an entry of this catalog is a
 # wordlist, so saying so says nothing -- but not mid-sentence, where "a ZIP
 # holding one text wordlist of Dutch words" is the useful thing to say.
+# "common words" measured as a false positive on its own: "the million most
+# common words in English Wikipedia" is specific, and a count or a corpus in
+# front of the phrase is what makes it so. "common terms" has no such rescue.
 banned: ["a wordlist of", "this wordlist", "wordlist containing", "wordlist for",
-         "a list of", "list of", "lists of", "common terms",
-         "common words", "common names", "commonly used", "various",
-         "used for fuzzing", "assorted", "a variety of", "miscellaneous"]
+         "a list of", "list of", "lists of", "common terms", "commonly used",
+         "various", "used for fuzzing", "assorted", "a variety of",
+         "miscellaneous"]
 
 # An axis with no vocabulary: freshness is the four-digit year the contents
 # imply. Listed so the census reports it like any other axis.
